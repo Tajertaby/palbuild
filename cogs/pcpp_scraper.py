@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import re
 import sys
@@ -15,9 +16,9 @@ sys.path.append(r"E:\Discord Bot Files")
 from sessions import SessionManager
 
 pcpp_log = logging.getLogger("pcpp_scraper")
+
 # Constants and regex patterns for identifying PCPartPicker URLs
-# The below three regexes are case insensitive
-PCPP_LIST_REGEX: str = (
+PCPP_LIST_REGEX: re.Pattern[str] = re.compile(
     r"""
     https?://                 # Protocol (http or https)
     (?:[a-z]{2}\.)?           # Optional country code subdomain
@@ -40,37 +41,18 @@ PCPP_LIST_REGEX: str = (
             homeoffice   # homeoffice build links does not have CPU brand name in it.
         )-build
     )
-    """
+    """,
+    re.IGNORECASE | re.VERBOSE,
 )
 
-WRONG_LINK_REGEX: str = (
-    r"https?://(?:[a-z]{2}\.)?pcpartpicker\.com/list/?(?:(?:by_merchant/?)|(?![a-z0-9/]))"
+WRONG_LINK_REGEX: re.Pattern[str] = re.compile(
+    r"https?://(?:[a-z]{2}\.)?pcpartpicker\.com/list/?(?:(?:by_merchant/?)|(?![a-z0-9/]))",
+    re.IGNORECASE,
 )
-DOMAIN_REGEX: str = r"https?://(?:[a-z]{2}\.)?pcpartpicker\.com"
-COUNTRIES = {
-    "au.",
-    "at.",
-    "be.",
-    "ca.",
-    "cz.",
-    "dk.",
-    "fi.",
-    "fr.",
-    "de.",
-    "hu.",
-    "ie.",
-    "it.",
-    "nl.",
-    "no.",
-    "nz.",
-    "pt.",
-    "ro.",
-    "sa.",
-    "sk.",
-    "es.",
-    "se.",
-    "uk.",
-}  # Excludes US
+DOMAIN_REGEX: re.Pattern[str] = re.compile(
+    r"https?://(?:[a-z]{2}\.)?pcpartpicker\.com", re.IGNORECASE
+)
+
 BUTTON_TEMPLATE: str = (
     "button:channel:(?P<channel_id>[0-9]+)message:(?P<message_id>[0-9]+)"
 )
@@ -82,7 +64,7 @@ class PCPPScraper:
     Methods used to scrape the required content from PCPartPicker.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.compatibility_emojis = {
             "Problem:": "<:cross:1144351182781943898>",
             "Warning:": "<:exclaimation:1144670756794535996>",
@@ -92,18 +74,40 @@ class PCPPScraper:
         self.power_emoji = "\U0001F50C"
         self.cash_emoji = "\U0001F4B8"
 
+    async def scrape_pcpartpicker(self, url) -> BeautifulSoup:
+        """
+        Fetch the HTML content from the given PCPartPicker URL.
+        """
+        try:
+            page = await SessionManager.request(url)
+            return BeautifulSoup(page, "html.parser")
+        except ClientConnectionError as e:  # Raises exception to pcpartpicker_main
+            raise ClientConnectionError(
+                f"Could not connect to web server. URL={url}, {e}"
+            ) from e
+        except ClientPayloadError as e:
+            raise ClientPayloadError(
+                f"Invalid payload from web server. URL={url}, {e}"
+            ) from e
+        except ClientResponseError as e:
+            raise ClientResponseError(
+                f"Invalid response from web server. URL={url}, {e}"
+            ) from e
+        except Exception as e:
+            raise Exception(
+                f"Some Exception related to the network request has occured: {e}"
+            ) from e
+
     def pcpp_domain(self, url) -> str:
         """
         Retrieve the base domain from the URL.
         """
-        domain = re.match(DOMAIN_REGEX, url, re.IGNORECASE)
-        domain_end_index = domain.end()
-        return url[:domain_end_index]
+        domain = DOMAIN_REGEX.match(url)
+        return url[: domain.end()]
 
-    def get_name_and_no_link(self, product_name) -> str:
+    def get_name_and_no_link(self, product_name) -> tuple[str, str]:
         """
-        This is only called if there is no provided link or if it is a custom part.
-        Only retrieves the name and removes brackets.
+        Extract the product name and remove brackets if no link is available.
         """
         product_name = product_name[1:-1]
         product_link = ""
@@ -112,53 +116,73 @@ class PCPPScraper:
     def extract_product_info(
         self,
         domain: str,
-        num_items: int,
-        component_elements: str,
-        product_elements: str,
-        price_elements: str,
+        component_elements: list[str],
+        product_elements: list[str],
+        price_elements: list[str],
     ) -> str:
         """
         Extracts product name, link, and price from the HTML elements.
         Links are not available for custom parts.
         """
         message = []
-        for index in range(num_items):
-            component_type = component_elements[index].contents[1].text.strip()
-            product_elements_contents = product_elements[index].contents
-            if len(product_elements_contents) >= 2:
-                product_name = f"[{product_elements_contents[1].text.strip()}]"
-                find_link = str(product_elements_contents[1])
-                if "a href" in find_link:
-                    product_link = (
-                        f"({domain}{product_elements[index].a.get('href').strip()})"
-                    )
-                    if "#view_custom_part" in product_link:
-                        product_name, product_link = self.get_name_and_no_link(
-                            product_name
-                        )
-                else:
-                    product_name, product_link = self.get_name_and_no_link(product_name)
-            else:
-                product_name = f"{product_elements_contents[0].text.strip()}"
-                product_link = ""
 
-            price_elements_contents = price_elements[index].contents
-            if len(price_elements_contents) >= 2:
-                product_price = f" - {price_elements_contents[-2].text.strip()}"
-            else:
-                product_price = " - No Price Available"
+        for (
+            component_type_element,
+            product_element,
+            product_price_element,
+        ) in zip(component_elements, product_elements, price_elements):
+            component_type = component_type_element.contents[1].text.strip()
+            product_name, product_link = self.extract_product_name_and_link(
+                product_element, domain
+            )
 
-            if product_price == " - No Prices":
-                product_price = " - No Price Available"
-            elif product_price == " - Price":
-                product_price = (
-                    f" - {price_elements_contents[-1].text.strip()} (Custom Price)"
-                )
+            product_price_value = self.extract_product_price(
+                product_price_element.contents
+            )
+
             message.append(
-                f"**{component_type}:** {product_name}{product_link}{product_price}"
+                f"**{component_type}:** {product_name}{product_link}{product_price_value}"
             )
 
         return "\n".join(message) + "\n"
+
+    def extract_product_name_and_link(
+        self, product_element, domain: str
+    ) -> tuple[str, str]:
+        """
+        Extracts product name and link from a product element.
+        """
+        product_contents = product_element.contents
+        if len(product_contents) >= 2:
+            product_name = f"[{product_contents[1].text.strip()}]"
+            find_link = str(product_contents)
+            if (
+                "a href" in find_link and "#view_custom_part" not in find_link
+            ):  # Checks if link is findable.
+                product_link = f"({domain}{product_element.a.get('href').strip()})"
+            else:
+                product_name, product_link = self.get_name_and_no_link(product_name)
+        else:
+            product_name = product_contents[0].text.strip()
+            product_link = ""
+
+        return product_name, product_link
+
+    def extract_product_price(self, price_contents) -> str:
+        """
+        Extracts the product price from a price element.
+        """
+        if len(price_contents) >= 2:
+            price_key = f" - {price_contents[-2].text.strip()}"
+        else:
+            price_key = " - No Prices"
+
+        price_dict = {
+            " - No Prices": " - No Price Available",
+            " - Price": f" - {price_contents[-1].text.strip()} (Custom Price)",
+        }
+
+        return price_dict.get(price_key, price_key)
 
     def get_compatibility_notes(self, soup) -> str:
         """
@@ -217,23 +241,27 @@ class PCPPScraper:
                 f"**Total Price:** {price_check}\n*After Rebates/Discounts/Taxes/Shipping*"
             )
 
-    async def scrape_pcpartpicker(self, url) -> str:
+    async def pcpartpicker_main(self, url) -> str:
         """
         Main method to scrape the PCPartPicker list.
         """
-        url = "https://pcpartpicker.com/b/9Kj2FT"
-        try:
-            page = await SessionManager.request(url)
-        except ClientConnectionError as e:
-            return f"Could not connect to web server: {e}"
-        except ClientPayloadError as e:
-            return f"Invalid payload from web server: {e}"
-        except ClientResponseError as e:
-            return f"Invalid response from web server: {e}"
-        except Exception as e:
-            return f"Some Exception related to the network request has occured: {e}"
 
-        soup = BeautifulSoup(page, "html.parser")
+        domain = self.pcpp_domain(url)  # Finds domain of the link.
+
+        try:
+            soup = await self.scrape_pcpartpicker(url)
+            if (
+                "pcpartpicker.com/b/" in url
+            ):  # Checks if it's a link from "Completed Builds" section which has "/b/" in the url.
+                find_new_url_ending = soup.select("span.header-actions")
+                new_url_ending = find_new_url_ending[0].a.get("href")
+                url = f"{domain}{new_url_ending}"
+                soup = await self.scrape_pcpartpicker(url)
+        except Exception as e:
+            logging.exception(e)  # Log the exception
+            return str(
+                e
+            )  # Returns the message whatever was raised in srcape_pcpartpicker.
 
         component_elements = soup.select("td.td__component")
         product_elements = soup.select("td.td__name")
@@ -250,12 +278,8 @@ class PCPPScraper:
         ):  # Checks for avaliable elements that can be parsed. If one element from elements_list returns empty list then it returns parsing error.
             pcpp_log.error("Cannot parse the HTML due to a missing element.")
             return "HTML parsing error due to a missing required HTML element"
-        num_items = len(component_elements)
         try:
-            domain = self.pcpp_domain(url)
-            product_message = self.extract_product_info(
-                domain, num_items, component_elements, product_elements, price_elements
-            )
+            product_message = self.extract_product_info(domain, *elements_list[:3])
             compatibility_message = self.get_compatibility_notes(soup)
             wattage_message = self.extract_power_wattage(
                 product_message, wattage_elements
@@ -277,60 +301,49 @@ class PCPPScraper:
         return pcpp_message
 
 
-class MessageHelper:
+class OnMessageAndItemHelper:
     """
     Utility functions to reduce redundancy in the code for sending previews.
     """
 
     @staticmethod
-    def get_preview_embed(urls: list) -> discord.Embed:
+    def find_number_of_lists(message_content: str) -> list[str]:
         """
-        pcpp_url_list: Takes a list as parameter to join it by using "\n" as a separator.
-        This returns a Discord embed object.
+        Extracts unique PCPartPicker URLs from the message content, normalizes and encodes them.
         """
-        newline_urls = "\n".join(urls)
-        return discord.Embed(
-            description=f"These are the previews for the following links:\n{newline_urls}",
-            color=9806321,
-        )
+        # Find all URLs matching the regex
+        pcpp_url_list = PCPP_LIST_REGEX.findall(message_content)
 
-    @staticmethod
-    def find_number_of_lists(pcpp_list_regex, message_content) -> str:
-        """
-        Finds the number of lists in a message
-        Removes duplicate urls and then encodes the urls
-        """
-        pcpp_url_list = re.findall(
-            pcpp_list_regex, message_content, re.IGNORECASE | re.VERBOSE
-        )
-        pcpp_url_list_duplicates_removed = list(dict.fromkeys(pcpp_url_list))
+        # Remove duplicates by converting the list to a set and then back to a list
+        unique_urls = list(dict.fromkeys(pcpp_url_list)) # Use dict keys for ordered urls
+
+        # Normalize URLs to HTTPS and remove the "#view=" part
         encoded_url_list = [
             parse.urlunparse(parse.urlparse(url)._replace(scheme="https")).replace(
                 "#view=", ""
             )
-            for url in pcpp_url_list_duplicates_removed
+            for url in unique_urls
         ]
         return encoded_url_list
-
-    @staticmethod
-    async def get_embed_from_original_message(interaction: discord.Interaction) -> str:
-        """
-        Helper function to get the original message's embed description.
-        """
-        await interaction.response.defer()
-        original_message = await interaction.original_response()
-        fetch_full_message_object = await original_message.fetch()
-        return fetch_full_message_object.embeds[0].description
 
     @staticmethod
     @alru_cache(maxsize=1024)
     async def fetch_list_preview(url: str) -> discord.Embed:
         """
-        Calls the scraper to get the PCPP message and caches the result.
-        Constructs a preview embed
+        Calls the scraper to get the PCPP message for a given URL and caches the result.
+
+        Parameters:
+        - url (str): The URL of the PCPartPicker list to scrape.
+
+        Returns:
+        - discord.Embed: An embed object containing the preview of the PCPP list.
+
+        Notes:
+        - Uses alru_cache to avoid repeated scraping for the same URL.
+        - Ensure that PCPPScraper initialization and requests are efficient.
         """
         scraper = PCPPScraper()
-        pcpp_message = await scraper.scrape_pcpartpicker(url)
+        pcpp_message = await scraper.pcpartpicker_main(url)
         return discord.Embed(description=pcpp_message, color=9806321)
 
 
@@ -342,17 +355,26 @@ class PCPPItemHelper:
         return channel_id, message_id
 
     @staticmethod
-    async def get_pcpp_url_list(bot, channel_id, message_id) -> list:
+    async def get_pcpp_url_list(bot, channel_id, message_id) -> list[str]:
+        """
+        Retrieves a list of PCPartPicker URLs from a specific message in a channel.
+
+        Parameters:
+        - bot (discord.Client): The bot instance used to access Discord channels.
+        - channel_id (int): The ID of the channel where the message is located.
+        - message_id (int): The ID of the message containing the URLs.
+
+        Returns:
+        - List[str]: A list of PCPartPicker URLs extracted from the message content.
+        """
         channel = bot.get_channel(channel_id)
         message = await channel.fetch_message(message_id)  # Retrieves message onject
-        pcpp_url_list = MessageHelper.find_number_of_lists(
-            PCPP_LIST_REGEX, message.content
-        )
+        pcpp_url_list = OnMessageAndItemHelper.find_number_of_lists(message.content)
         return pcpp_url_list
 
     @staticmethod
     async def send_pcpp_preview(interaction: discord.Interaction, url: str) -> None:
-        pcpp_message_embed = await MessageHelper.fetch_list_preview(
+        pcpp_message_embed = await OnMessageAndItemHelper.fetch_list_preview(
             url
         )  # Web scrapes and caches PCPP preview results from that url
         await interaction.response.send_message(
@@ -390,7 +412,11 @@ class PCPPButton(discord.ui.DynamicItem[discord.ui.Button], template=BUTTON_TEMP
         url = pcpp_url_list[0]
         return cls(channel_id, message_id, url)
 
-    async def callback(self, interaction: discord.Interaction) -> None:
+    async def callback(self, interaction: discord.Interaction) -> discord.Message:
+        """
+        This is called when a button is pressed.
+        """
+        await asyncio.sleep(1)  # Reduces chance of rate limit
         await PCPPItemHelper.send_pcpp_preview(interaction, self.url)
 
 
@@ -408,18 +434,19 @@ class PCPPMenu(
         """
         self.channel_id = channel_id
         self.message_id = message_id
+        self.options = options
         super().__init__(
             discord.ui.Select(
                 placeholder="View Previews",
                 custom_id=f"menu:channel:{self.channel_id}message:{self.message_id}",
-                options=options,
+                options=self.options,
             )
         )
 
     @staticmethod
     def calculate_options(pcpp_url_list) -> discord.SelectOption:
         """
-        On the first creation of the menu, it will calculate menu options and store it in a dictionary.
+        OnMessageAndItemHelper the first creation of the menu, it will calculate menu options and store it in a dictionary.
         If the menu needs to be send again, it will retrieve from the dictionary for faster access.
         In case of a bot downtime, it retrieves the contents of the user interacted message to work out the options.
         """
@@ -455,8 +482,13 @@ class PCPPMenu(
         options = cls.calculate_options(pcpp_url_list)
         return cls(channel_id, message_id, options)
 
-    async def callback(self, interaction: discord.Interaction) -> None:
+    async def callback(self, interaction: discord.Interaction) -> discord.Message:
+        """
+        This is called when a menu option is pressed.
+        """
+        await asyncio.sleep(1)  # Reduces chance of rate limit
         await PCPPItemHelper.send_pcpp_preview(interaction, self.item.values[0])
+        await interaction.message.edit()  # Resets user choice after each selection in the menu.
 
 
 class PCPPCog(commands.Cog):
@@ -464,49 +496,67 @@ class PCPPCog(commands.Cog):
     The Cog for handling PCPartPicker list previews.
     """
 
-    def __init__(self, bot):
+    def __init__(self, bot: commands.Bot):
         self.bot = bot
 
     @commands.Cog.listener()
-    async def on_message(self, message) -> None:
+    async def on_message(self, message: discord.Message) -> None:
         """
         Listens for messages containing PCPartPicker URLs and handles them.
         """
-        pcpp_url_list = MessageHelper.find_number_of_lists(
-            PCPP_LIST_REGEX, message.content
+        pcpp_url_list = OnMessageAndItemHelper.find_number_of_lists(message.content)
+        pcpp_wrong_link = WRONG_LINK_REGEX.search(message.content)
+
+        if pcpp_url_list:
+            await self.handle_pcpp_links(message, pcpp_url_list)
+        elif pcpp_wrong_link:
+            await self.handle_wrong_links(message)
+
+    def get_preview_embed(self, urls: list) -> discord.Embed:
+        """
+        pcpp_url_list: Takes a list as parameter to join it by using "\n" as a separator.
+        This returns a Discord embed object.
+        """
+        newline_urls = "\n".join(urls)
+        return discord.Embed(
+            description=f"These are the previews for the following links:\n{newline_urls}",
+            color=9806321,
         )
-        pcpp_wrong_link = re.search(WRONG_LINK_REGEX, message.content, re.IGNORECASE)
+
+    async def handle_pcpp_links(
+        self, message: discord.Message, pcpp_url_list: list[str]
+    ) -> discord.Message:
+        """
+        Handles PCPartPicker links and sends an appropriate response.
+        """
+        preview_embed = self.get_preview_embed(pcpp_url_list)
+        view = discord.ui.View(timeout=None)
 
         if len(pcpp_url_list) == 1:
             url = pcpp_url_list[0]
-            preview_embed = MessageHelper.get_preview_embed(pcpp_url_list)
-            view = discord.ui.View(timeout=None)
             button = PCPPButton(message.channel.id, message.id, url)
             view.add_item(button)
-            await message.reply(embed=preview_embed, view=view)
-        elif len(pcpp_url_list) > 1:
+        else:
             options = PCPPMenu.calculate_options(pcpp_url_list)
-            preview_embed = MessageHelper.get_preview_embed(pcpp_url_list)
-            view = discord.ui.View(timeout=None)
             menu = PCPPMenu(message.channel.id, message.id, options)
             view.add_item(menu)
-            await message.reply(embed=preview_embed, view=view)
-        else:
-            pass
 
-        if (
-            pcpp_wrong_link
-        ):  # Checks if at least one of the send PCPartPicker link is incorrect.
-            wrong_link_embed = discord.Embed(
-                title=(
-                    "**One or more of your PCPartPicker link(s) is wrong, "
-                    "as these links only make the associated list viewable to you. "
-                    "Please refer to the image below.**"
-                ),
-                color=9806321,
-            )
-            wrong_link_embed.set_image(url="https://i.imgur.com/O0TFvRc.jpeg")
-            await message.reply(embed=wrong_link_embed)
+        await message.reply(embed=preview_embed, view=view)
+
+    async def handle_wrong_links(self, message: discord.Message) -> discord.Message:
+        """
+        Handles incorrect PCPartPicker links and sends an error message.
+        """
+        wrong_link_embed = discord.Embed(
+            title=(
+                "**One or more of your PCPartPicker link(s) is wrong, "
+                "as these links only make the associated list viewable to you. "
+                "Please refer to the image below.**"
+            ),
+            color=9806321,
+        )
+        wrong_link_embed.set_image(url="https://i.imgur.com/O0TFvRc.jpeg")
+        await message.reply(embed=wrong_link_embed)
 
 
 async def setup(bot) -> None:
