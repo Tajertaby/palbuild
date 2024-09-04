@@ -39,5 +39,8 @@ class SessionManager:
 
     @classmethod
     async def close_session(cls) -> None:
-        cls.server.info("Closing session")
-        await cls.session.close()
+        if cls.session:
+            cls.server.info("Closing session")
+            await cls.session.close()
+        else:
+            logging.error("Bot cannot login due to API issues.")

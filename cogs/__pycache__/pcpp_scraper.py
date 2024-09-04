@@ -66,22 +66,20 @@ class PCPPScraper:
 
     def __init__(self) -> None:
         self.compatibility_emojis = {
-            "Problem:": "<:cross:1144351182781943898>",
-            "Warning:": "<:exclaimation:1144670756794535996>",
-            "Note:": "<:rules:1144938040100388904>",
-            "Disclaimer:": None,
+            "**Problem:**": "<:cross:1144351182781943898>",  # Cross emoji
+            "**Warning:**": "<:exclaimation:1144670756794535996>",  # Exclaimation emoji
+            "**Note:**": "<:rules:1144938040100388904>",  # Note emoji
         }
         self.power_emoji = "\U0001F50C"
         self.cash_emoji = "\U0001F4B8"
 
-    async def scrape_pcpartpicker(self, url, tag_name, class_) -> BeautifulSoup:
+    async def scrape_pcpartpicker(self, url) -> BeautifulSoup:
         """
         Fetch the HTML content from the given PCPartPicker URL.
         """
-        # strainer_elements = ['td', 'p', 'div'
         try:
             page = await SessionManager.request(url)
-            return BeautifulSoup(page, "lxml")
+            return BeautifulSoup(page, "html.parser")
         except ClientConnectionError as e:  # Raises exception to pcpartpicker_main
             raise ClientConnectionError(
                 f"Could not connect to web server. URL={url}, {e}"
@@ -157,6 +155,7 @@ class PCPPScraper:
         if len(product_contents) >= 2:
             product_name = f"[{product_contents[1].text.strip()}]"
             find_link = str(product_contents)
+            print(find_link)
             if (
                 "a href" in find_link and "#view_custom_part" not in find_link
             ):  # Checks if link is findable.
@@ -195,11 +194,8 @@ class PCPPScraper:
             soup.select("p.note__text.note__text--warning"),
             soup.select("p.note__text.note__text--info"),
         ]
-        class_list_cleanup = [
-            soup_class for soup_class in class_list if soup_class != []
-        ]
 
-        for note_class in class_list_cleanup:
+        for note_class in class_list:
             for text in note_class:
                 note_type = text.contents[0].text.strip()
                 note_text = text.contents[1].text.strip()
@@ -209,6 +205,7 @@ class PCPPScraper:
                     "Note:": f"{self.compatibility_emojis[note_type]} **{note_type}** {note_text}",
                     "Disclaimer:": f"> {note_type} {note_text}\n \n",
                 }
+                print(note_type)
                 message.append(note_dict.get(note_type, ""))
 
         return "\n".join(message) + "\n"
@@ -217,13 +214,15 @@ class PCPPScraper:
         """
         Extracts the total power wattage from the list.
         """
-        if product_message.strip():
-            wattage = wattage_elements.text.split(":")[
-                -1
-            ].strip()  # Get the wattage number
-            return f"{self.power_emoji} **Total Estimated Power:** {wattage}\n"
-        else:
-            return ""
+        for div in wattage_elements:
+            if "Total:" in div.get_text():
+                total_td = div.find("td", string="Total:")
+                if total_td and product_message.strip() != "":
+                    wattage = total_td.find_next_sibling("td").text
+                    return f"{self.power_emoji} **Total Estimated Power:** {wattage}\n"
+                else:
+                    break
+        return ""
 
     def calculate_total_price(self, product_message, price_elements) -> str:
         """
@@ -240,7 +239,6 @@ class PCPPScraper:
                 f"**Total Price:** {price_check}\n*After Rebates/Discounts/Taxes/Shipping*"
             )
 
-    @alru_cache(maxsize=1024)
     async def pcpartpicker_main(self, url) -> str:
         """
         Main method to scrape the PCPartPicker list.
@@ -249,27 +247,14 @@ class PCPPScraper:
         domain = self.pcpp_domain(url)  # Finds domain of the link.
 
         try:
+            soup = await self.scrape_pcpartpicker(url)
             if (
                 "pcpartpicker.com/b/" in url
             ):  # Checks if it's a link from "Completed Builds" section which has "/b/" in the url.
-                soup = await self.scrape_pcpartpicker(
-                    url, "span", "span.header-actions"
-                )
                 find_new_url_ending = soup.select("span.header-actions")
                 new_url_ending = find_new_url_ending[0].a.get("href")
                 url = f"{domain}{new_url_ending}"
-            tag_name_list = ["td", "a", "div"]
-            class_list = [
-                "td__component",
-                "td__name", # Product Name
-                "td__price", # Product Price
-                "actionBox__actions--key-metric-breakdown", # Wattage
-                "note__text.note__text--problem",
-                "note__text.note__text--warning",
-                "note__text.note__text--info",
-                ]
-            soup = await self.scrape_pcpartpicker(url, tag_name_list, class_list)
-
+                soup = await self.scrape_pcpartpicker(url)
         except Exception as e:
             logging.exception(e)  # Log the exception
             return str(
@@ -279,14 +264,13 @@ class PCPPScraper:
         component_elements = soup.select("td.td__component")
         product_elements = soup.select("td.td__name")
         price_elements = soup.select("td.td__price")
-        wattage_elements = soup.select_one("a.actionBox__actions--key-metric-breakdown")
+        wattage_elements = soup.select("div.modal__content")
         elements_list = [
             component_elements,
             product_elements,
             price_elements,
             wattage_elements,
         ]
-
         if any(
             not element for element in elements_list
         ):  # Checks for avaliable elements that can be parsed. If one element from elements_list returns empty list then it returns parsing error.
@@ -329,20 +313,18 @@ class OnMessageAndItemHelper:
         pcpp_url_list = PCPP_LIST_REGEX.findall(message_content)
 
         # Remove duplicates by converting the list to a set and then back to a list
-        unique_urls = list(
-            dict.fromkeys(pcpp_url_list)
-        )  # Use dict keys for ordered urls
+        unique_urls = list(set(pcpp_url_list))
 
         # Normalize URLs to HTTPS and remove the "#view=" part
         encoded_url_list = [
-            parse.urlunparse(parse.urlparse(url)._replace(scheme="https")).replace(
-                "#view=", ""
-            )
+            parse.urlunparse(parse.urlparse(url)._replace(scheme="https")).split("#")[0]
             for url in unique_urls
         ]
+
         return encoded_url_list
 
     @staticmethod
+    @alru_cache(maxsize=1024)
     async def fetch_list_preview(url: str) -> discord.Embed:
         """
         Calls the scraper to get the PCPP message for a given URL and caches the result.
@@ -370,7 +352,6 @@ class PCPPItemHelper:
         return channel_id, message_id
 
     @staticmethod
-    @alru_cache(maxsize=1024)
     async def get_pcpp_url_list(bot, channel_id, message_id) -> list[str]:
         """
         Retrieves a list of PCPartPicker URLs from a specific message in a channel.
@@ -432,7 +413,7 @@ class PCPPButton(discord.ui.DynamicItem[discord.ui.Button], template=BUTTON_TEMP
         """
         This is called when a button is pressed.
         """
-        # await asyncio.sleep(1)  # Reduces chance of rate limit
+        await asyncio.sleep(1)  # Reduces chance of rate limit
         await PCPPItemHelper.send_pcpp_preview(interaction, self.url)
 
 
@@ -502,7 +483,7 @@ class PCPPMenu(
         """
         This is called when a menu option is pressed.
         """
-        # await asyncio.sleep(1)  # Reduces chance of rate limit
+        await asyncio.sleep(1)  # Reduces chance of rate limit
         await PCPPItemHelper.send_pcpp_preview(interaction, self.item.values[0])
         await interaction.message.edit()  # Resets user choice after each selection in the menu.
 
@@ -528,7 +509,7 @@ class PCPPCog(commands.Cog):
         elif pcpp_wrong_link:
             await self.handle_wrong_links(message)
 
-    def get_preview_embed(self, urls: list) -> discord.Embed:
+    def get_preview_embed(urls: list) -> discord.Embed:
         """
         pcpp_url_list: Takes a list as parameter to join it by using "\n" as a separator.
         This returns a Discord embed object.
