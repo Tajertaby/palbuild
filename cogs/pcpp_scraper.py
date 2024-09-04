@@ -7,7 +7,7 @@ import urllib.parse as parse
 import discord
 from async_lru import alru_cache
 from aiohttp import ClientConnectionError, ClientPayloadError, ClientResponseError
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, SoupStrainer
 from discord.ext import commands
 
 
@@ -74,14 +74,16 @@ class PCPPScraper:
         self.power_emoji = "\U0001F50C"
         self.cash_emoji = "\U0001F4B8"
 
-    async def scrape_pcpartpicker(self, url, tag_name, class_) -> BeautifulSoup:
+    async def scrape_pcpartpicker(self, url, tag_name, class_list) -> BeautifulSoup:
         """
         Fetch the HTML content from the given PCPartPicker URL.
         """
-        # strainer_elements = ['td', 'p', 'div'
         try:
+            strainer = SoupStrainer(
+                tag_name, class_=class_list
+            )  # Filters the HTML for efficiency
             page = await SessionManager.request(url)
-            return BeautifulSoup(page, "lxml")
+            return BeautifulSoup(page, "lxml", parse_only=strainer)
         except ClientConnectionError as e:  # Raises exception to pcpartpicker_main
             raise ClientConnectionError(
                 f"Could not connect to web server. URL={url}, {e}"
@@ -240,7 +242,6 @@ class PCPPScraper:
                 f"**Total Price:** {price_check}\n*After Rebates/Discounts/Taxes/Shipping*"
             )
 
-    @alru_cache(maxsize=1024)
     async def pcpartpicker_main(self, url) -> str:
         """
         Main method to scrape the PCPartPicker list.
@@ -252,29 +253,27 @@ class PCPPScraper:
             if (
                 "pcpartpicker.com/b/" in url
             ):  # Checks if it's a link from "Completed Builds" section which has "/b/" in the url.
-                soup = await self.scrape_pcpartpicker(
-                    url, "span", "span.header-actions"
-                )
+                soup = await self.scrape_pcpartpicker(url, "span", "header-actions")
                 find_new_url_ending = soup.select("span.header-actions")
                 new_url_ending = find_new_url_ending[0].a.get("href")
                 url = f"{domain}{new_url_ending}"
-            tag_name_list = ["td", "a", "div"]
+            tag_name_list = ["td", "a", "p"]
             class_list = [
                 "td__component",
-                "td__name", # Product Name
-                "td__price", # Product Price
-                "actionBox__actions--key-metric-breakdown", # Wattage
+                "td__name",  # Product Name
+                "td__price",  # Product Price
+                "actionBox__actions--key-metric-breakdown",  # Wattage
                 "note__text.note__text--problem",
                 "note__text.note__text--warning",
-                "note__text.note__text--info",
-                ]
+                "note__text.note__text--info",  # Note and disclaimer
+            ]
             soup = await self.scrape_pcpartpicker(url, tag_name_list, class_list)
 
         except Exception as e:
             logging.exception(e)  # Log the exception
             return str(
                 e
-            )  # Returns the message whatever was raised in srcape_pcpartpicker.
+            )  # Returns the message whatever was raised in scrape_pcpartpicker.
 
         component_elements = soup.select("td.td__component")
         product_elements = soup.select("td.td__name")
@@ -308,8 +307,8 @@ class PCPPScraper:
 
         if len(pcpp_message) > 4096:
             pcpp_message = (
-                "Error in generating a PCPP list preview."
-                "The returned string exceeds Discord's max character limit of 4096 characters."
+                f"Error in generating a PCPP list preview.\n"
+                f"The returned string exceeds Discord's max character limit of 4096 characters."
             )
 
         return pcpp_message
@@ -343,6 +342,7 @@ class OnMessageAndItemHelper:
         return encoded_url_list
 
     @staticmethod
+    @alru_cache(maxsize=1024)
     async def fetch_list_preview(url: str) -> discord.Embed:
         """
         Calls the scraper to get the PCPP message for a given URL and caches the result.
@@ -389,6 +389,7 @@ class PCPPItemHelper:
         return pcpp_url_list
 
     @staticmethod
+    @alru_cache(maxsize=1024)
     async def send_pcpp_preview(interaction: discord.Interaction, url: str) -> None:
         pcpp_message_embed = await OnMessageAndItemHelper.fetch_list_preview(
             url
@@ -432,7 +433,6 @@ class PCPPButton(discord.ui.DynamicItem[discord.ui.Button], template=BUTTON_TEMP
         """
         This is called when a button is pressed.
         """
-        # await asyncio.sleep(1)  # Reduces chance of rate limit
         await PCPPItemHelper.send_pcpp_preview(interaction, self.url)
 
 
