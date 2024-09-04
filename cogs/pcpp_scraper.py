@@ -83,7 +83,8 @@ class PCPPScraper:
                 tag_name, class_=class_list
             )  # Filters the HTML for efficiency
             page = await SessionManager.request(url)
-            return BeautifulSoup(page, "lxml", parse_only=strainer)
+            soup = BeautifulSoup(page, "lxml", parse_only=strainer)
+            return soup
         except ClientConnectionError as e:  # Raises exception to pcpartpicker_main
             raise ClientConnectionError(
                 f"Could not connect to web server. URL={url}, {e}"
@@ -193,15 +194,11 @@ class PCPPScraper:
         """
         message = []
         class_list = [
-            soup.select("p.note__text.note__text--problem"),
-            soup.select("p.note__text.note__text--warning"),
-            soup.select("p.note__text.note__text--info"),
+            soup.find_all("p", class_="note__text note__text--problem"),
+            soup.find_all("p", class_="note__text note__text--warning"),
+            soup.find_all("p", class_="note__text note__text--info"),
         ]
-        class_list_cleanup = [
-            soup_class for soup_class in class_list if soup_class != []
-        ]
-
-        for note_class in class_list_cleanup:
+        for note_class in class_list:
             for text in note_class:
                 note_type = text.contents[0].text.strip()
                 note_text = text.contents[1].text.strip()
@@ -263,9 +260,9 @@ class PCPPScraper:
                 "td__name",  # Product Name
                 "td__price",  # Product Price
                 "actionBox__actions--key-metric-breakdown",  # Wattage
-                "note__text.note__text--problem",
-                "note__text.note__text--warning",
-                "note__text.note__text--info",  # Note and disclaimer
+                "note__text note__text--problem",
+                "note__text note__text--warning",
+                "note__text note__text--info",  # Note and disclaimer
             ]
             soup = await self.scrape_pcpartpicker(url, tag_name_list, class_list)
 
@@ -275,10 +272,10 @@ class PCPPScraper:
                 e
             )  # Returns the message whatever was raised in scrape_pcpartpicker.
 
-        component_elements = soup.select("td.td__component")
-        product_elements = soup.select("td.td__name")
-        price_elements = soup.select("td.td__price")
-        wattage_elements = soup.select_one("a.actionBox__actions--key-metric-breakdown")
+        component_elements = soup.find_all("td", class_="td__component")
+        product_elements = soup.find_all("td", class_="td__name")
+        price_elements = soup.find_all("td", class_="td__price")
+        wattage_elements = soup.find("a", class_= "actionBox__actions--key-metric-breakdown")
         elements_list = [
             component_elements,
             product_elements,
