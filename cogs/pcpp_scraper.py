@@ -1,19 +1,14 @@
-import asyncio
 import logging
 import re
 import sys
 import urllib.parse as parse
+from sessions import SessionManager
 
 import discord
 from async_lru import alru_cache
 from aiohttp import ClientConnectionError, ClientPayloadError, ClientResponseError
 from bs4 import BeautifulSoup, SoupStrainer
 from discord.ext import commands
-
-
-sys.path.append(r"E:\Discord Bot Files")
-
-from sessions import SessionManager
 
 pcpp_log = logging.getLogger("pcpp_scraper")
 
