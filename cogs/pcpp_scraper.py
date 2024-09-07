@@ -2,6 +2,7 @@ import logging
 import re
 import sys
 import urllib.parse as parse
+from asyncio import TimeoutError
 from sessions import SessionManager
 
 import discord
@@ -80,7 +81,11 @@ class PCPPScraper:
             page = await SessionManager.request(url)
             soup = BeautifulSoup(page, "lxml", parse_only=strainer)
             return soup
-        except ClientConnectionError as e:  # Raises exception to pcpartpicker_main
+        except (TimeoutError) as e: # Raises exception to pcpartpicker_main
+            raise TimeoutError(
+                f"Web server timeout. URL={url}, {e}"
+            ) from e
+        except ClientConnectionError as e:
             raise ClientConnectionError(
                 f"Could not connect to web server. URL={url}, {e}"
             ) from e
@@ -240,37 +245,51 @@ class PCPPScraper:
         """
 
         domain = self.pcpp_domain(url)  # Finds domain of the link.
+        tries = 1
+        if ("pcpartpicker.com/b/" in url): # Checks if it's a link from "Completed Builds" section which has "/b/" in the url.
+            for tries in range (3):
+                try:
+                    soup = await self.scrape_pcpartpicker(url, "span", "header-actions")
+                    find_new_url_ending = soup.find("span", class_="header-actions")
+                    new_url_ending = find_new_url_ending.a.get("href")
+                    url = f"{domain}{new_url_ending}"
+                    break
+                except(TimeoutError, ClientConnectionError) as e:
+                    logging.info("Retrying, %s retries left: %s", tries+1, e)  # Log the exception
+                except Exception:
+                    logging.exception(e)  # Log the exception
+                    return str(
+                        e
+                    )  # Returns the message whatever was raised in scrape_pcpartpicker.
 
-        try:
-            if (
-                "pcpartpicker.com/b/" in url
-            ):  # Checks if it's a link from "Completed Builds" section which has "/b/" in the url.
-                soup = await self.scrape_pcpartpicker(url, "span", "header-actions")
-                find_new_url_ending = soup.select("span.header-actions")
-                new_url_ending = find_new_url_ending[0].a.get("href")
-                url = f"{domain}{new_url_ending}"
-            tag_name_list = ["td", "a", "p"]
-            class_list = [
-                "td__component",
-                "td__name",  # Product Name
-                "td__price",  # Product Price
-                "actionBox__actions--key-metric-breakdown",  # Wattage
-                "note__text note__text--problem",
-                "note__text note__text--warning",
-                "note__text note__text--info",  # Note and disclaimer
-            ]
-            soup = await self.scrape_pcpartpicker(url, tag_name_list, class_list)
-
-        except Exception as e:
-            logging.exception(e)  # Log the exception
-            return str(
-                e
-            )  # Returns the message whatever was raised in scrape_pcpartpicker.
+        for tries in range (3):
+            try:
+                tag_name_list = ["td", "a", "p"]
+                class_list = [
+                    "td__component",
+                    "td__name",  # Product Name
+                    "td__price",  # Product Price
+                    "actionBox__actions--key-metric-breakdown",  # Wattage
+                    "note__text note__text--problem",
+                    "note__text note__text--warning",
+                    "note__text note__text--info",  # Note and disclaimer
+                ]
+                soup = await self.scrape_pcpartpicker(url, tag_name_list, class_list)
+                break
+            except(TimeoutError, ClientConnectionError) as e:
+                logging.info("Retrying, %s retries left: %s", tries+1, e)  # Log the exception
+            except Exception as e:
+                logging.exception(e)  # Log the exception
+                return str(
+                    e
+                )  # Returns the message whatever was raised in scrape_pcpartpicker.
 
         component_elements = soup.find_all("td", class_="td__component")
         product_elements = soup.find_all("td", class_="td__name")
         price_elements = soup.find_all("td", class_="td__price")
-        wattage_elements = soup.find("a", class_= "actionBox__actions--key-metric-breakdown")
+        wattage_elements = soup.find(
+            "a", class_="actionBox__actions--key-metric-breakdown"
+        )
         elements_list = [
             component_elements,
             product_elements,
@@ -494,7 +513,6 @@ class PCPPMenu(
         """
         This is called when a menu option is pressed.
         """
-        # await asyncio.sleep(1)  # Reduces chance of rate limit
         await PCPPItemHelper.send_pcpp_preview(interaction, self.item.values[0])
         await interaction.message.edit()  # Resets user choice after each selection in the menu.
 
