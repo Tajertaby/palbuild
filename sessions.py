@@ -4,7 +4,7 @@ import logging
 
 class SessionManager:
     server = logging.getLogger("aiohttp")
-    timeout = aiohttp.ClientTimeout(total=0.1)
+    timeout = aiohttp.ClientTimeout(total=5)
 
     @classmethod
     def create_session(cls) -> None:
