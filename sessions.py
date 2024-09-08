@@ -21,7 +21,7 @@ class SessionManager:
         cls.session = aiohttp.ClientSession(headers=headers, timeout=cls.timeout)
 
     @classmethod
-    async def request(cls, url, *args, **kwargs) -> str:
+    async def request(cls, url) -> str:
         """
         Make a request to the server
         """

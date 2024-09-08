@@ -6,8 +6,8 @@ from typing import Tuple, Set, Optional
 import discord
 from discord.ext import commands
 from dotenv import load_dotenv
-from sessions import SessionManager
 from watchfiles import awatch, Change
+from sessions import SessionManager
 
 # Load environment variables
 load_dotenv(r"E:\Discord Bot Files\secrets.env")
