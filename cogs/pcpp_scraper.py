@@ -247,7 +247,7 @@ class PCPPScraper:
         domain = self.pcpp_domain(url)  # Finds domain of the link.
         tries = 1
         if ("pcpartpicker.com/b/" in url): # Checks if it's a link from "Completed Builds" section which has "/b/" in the url.
-            for tries in range (3):
+            for tries in range (3,0,-1):
                 try:
                     soup = await self.scrape_pcpartpicker(url, "span", "header-actions")
                     find_new_url_ending = soup.find("span", class_="header-actions")
@@ -255,14 +255,14 @@ class PCPPScraper:
                     url = f"{domain}{new_url_ending}"
                     break
                 except(TimeoutError, ClientConnectionError) as e:
-                    logging.info("Retrying, %s retries left: %s", tries+1, e)  # Log the exception
+                    logging.info("Retrying, %s retries left: %s", tries, e)  # Log the exception
                 except Exception:
                     logging.exception(e)  # Log the exception
                     return str(
                         e
                     )  # Returns the message whatever was raised in scrape_pcpartpicker.
 
-        for tries in range (3):
+        for tries in range (3,0,-1):
             try:
                 tag_name_list = ["td", "a", "p"]
                 class_list = [
@@ -277,7 +277,7 @@ class PCPPScraper:
                 soup = await self.scrape_pcpartpicker(url, tag_name_list, class_list)
                 break
             except(TimeoutError, ClientConnectionError) as e:
-                logging.info("Retrying, %s retries left: %s", tries+1, e)  # Log the exception
+                logging.info("Retrying, %s retries left: %s", tries, e)  # Log the exception
             except Exception as e:
                 logging.exception(e)  # Log the exception
                 return str(
