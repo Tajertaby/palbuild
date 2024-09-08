@@ -219,7 +219,6 @@ class PCPPScraper:
             " - No Prices": " - No Price Available",
             " - Price": f" - {price_contents[-1].text.strip()} (Custom Price)",
         }
-
         return price_mapping.get(price_key, price_key)
 
     def extract_compatibility_notes(self, soup: BeautifulSoup) -> str:
@@ -312,6 +311,7 @@ class PCPPScraper:
         component_elements = soup.find_all("td", class_="td__component")
         product_elements = soup.find_all("td", class_="td__name")
         price_elements = soup.find_all("td", class_="td__price")
+        print(price_elements)
         wattage_element = soup.find(
             "a", class_="actionBox__actions--key-metric-breakdown"
         )
@@ -370,8 +370,11 @@ class PCPPScraper:
                 return f"{domain}{new_url_ending}"
             except (TimeoutError, ClientConnectionError) as e:
                 server.info("Retrying, %s attempts left: %s", attempt, e)
-            except (ClientPayloadError, ClientResponseError, Exception) as e:
+            except (ClientPayloadError, ClientResponseError) as e:
                 server.exception(e)
+                raise
+            except Exception as e:
+                logging.exception(e)
                 raise
 
         raise Exception("Failed to fetch list URL after maximum retries")
@@ -395,6 +398,7 @@ class PCPPScraper:
             "td__component",
             "td__name",
             "td__price",
+            "td__price td__price--none",
             "actionBox__actions--key-metric-breakdown",
             "note__text note__text--problem",
             "note__text note__text--warning",
@@ -406,8 +410,11 @@ class PCPPScraper:
                 return await self.fetch_html_content(url, tag_names, classes)
             except (TimeoutError, ClientConnectionError) as e:
                 server.info("Retrying, %s attempts left: %s", attempt, e)
-            except (ClientPayloadError, ClientResponseError, Exception) as e:
+            except (ClientPayloadError, ClientResponseError) as e:
                 server.exception(e)
+                raise
+            except Exception as e:
+                logging.exception(e)
                 raise
 
         raise Exception("Failed to fetch list content after maximum retries")
