@@ -311,7 +311,7 @@ class PCPPScraper:
         component_elements = soup.find_all("td", class_="td__component")
         product_elements = soup.find_all("td", class_="td__name")
         price_elements = soup.find_all("td", class_="td__price")
-        print(price_elements)
+        print(soup.find_all("td", class_="td__where td__where--purchased"))
         wattage_element = soup.find(
             "a", class_="actionBox__actions--key-metric-breakdown"
         )
@@ -399,6 +399,7 @@ class PCPPScraper:
             "td__name",
             "td__price",
             "td__price td__price--none",
+            "td__where td__where--purchased",
             "actionBox__actions--key-metric-breakdown",
             "note__text note__text--problem",
             "note__text note__text--warning",
