@@ -2,3 +2,4 @@ secrets.env
 pcpp_data.sql
 alru_cache.py
 discord_backup_codes.txt
+.venv/pyvenv.cfg

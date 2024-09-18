@@ -141,6 +141,7 @@ class PCPPScraper:
         component_elements: list[str],
         product_elements: list[str],
         price_elements: list[str],
+        merchant_elements: list[str],
     ) -> str:
         """
         Extract and format product details from HTML elements.
@@ -150,23 +151,25 @@ class PCPPScraper:
             component_elements (list): HTML elements containing component types.
             product_elements (list): HTML elements containing product names and links.
             price_elements (list): HTML elements containing price information.
+            merchant_elements (list): HTML elemtns containing merchant and purchase information.
 
         Returns:
             str: Formatted string of product details.
         """
         details = []
 
-        for component, product, price in zip(
-            component_elements, product_elements, price_elements
+        for component, product, price, merchant in zip(
+            component_elements, product_elements, price_elements, merchant_elements
         ):
             component_type = component.contents[1].text.strip()
             product_name, product_link = self.parse_product_name_and_link(
                 product, domain
             )
-            price_value = self.parse_price(price.contents)
+
+            purchase = self.purchase_info(price.contents, merchant.contents)
 
             details.append(
-                f"**{component_type}:** {product_name}{product_link}{price_value}"
+                f"**{component_type}:** {product_name}{product_link}{purchase}"
             )
 
         return "\n".join(details) + "\n"
@@ -200,26 +203,33 @@ class PCPPScraper:
 
         return product_name, product_link
 
-    def parse_price(self, price_contents: list) -> str:
+
+    def purchase_info(self, price_contents, merchant_contents: list) -> str:
         """
-        Parse and format the price from price contents.
+        Parse and format the purchase info.
 
         Args:
-            price_contents (list): List of price-related HTML elements.
+            merchant_contents (list): List of merchant-related HTML elements.
 
         Returns:
-            str: Formatted price string.
+            str: Price and merchant (if avaliable).
         """
-        if len(price_contents) >= 2:
-            price_key = f" - {price_contents[-2].text.strip()}"
-        else:
-            price_key = " - No Prices"
 
-        price_mapping = {
-            " - No Prices": " - No Price Available",
-            " - Price": f" - {price_contents[-1].text.strip()} (Custom Price)",
-        }
-        return price_mapping.get(price_key, price_key)
+        if "alt=" in str(merchant_contents): # Retrieve merchant
+            price = f" - {price_contents[-2].text.strip()}"
+            merchant = next(
+                (f" @{elem.img.get('alt')}" for elem in merchant_contents if "alt=" in str(elem)),
+            None,
+            )
+        else:
+            if len(price_contents) < 2 or price_contents[-2].text == "No Prices":
+                price = " - No Prices Available"
+            elif merchant_contents[-1] != "Purchased":
+                price= f" - {price_contents[-1].text} (Custom Price)"
+            else:
+                price = f" - {price_contents[-1].text} (Custom Price | Purchased)"
+            merchant = ""
+        return f"{price}{merchant}"
 
     def extract_compatibility_notes(self, soup: BeautifulSoup) -> str:
         """
@@ -311,7 +321,7 @@ class PCPPScraper:
         component_elements = soup.find_all("td", class_="td__component")
         product_elements = soup.find_all("td", class_="td__name")
         price_elements = soup.find_all("td", class_="td__price")
-        print(soup.find_all("td", class_="td__where td__where--purchased"))
+        merchant_elements = soup.find_all("td", class_="td__where")
         wattage_element = soup.find(
             "a", class_="actionBox__actions--key-metric-breakdown"
         )
@@ -324,7 +334,11 @@ class PCPPScraper:
 
         try:
             product_message = self.extract_product_details(
-                domain, component_elements, product_elements, price_elements
+                domain,
+                component_elements,
+                product_elements,
+                price_elements,
+                merchant_elements,
             )
             compatibility_message = self.extract_compatibility_notes(soup)
             wattage_message = self.format_power_consumption(
@@ -399,6 +413,8 @@ class PCPPScraper:
             "td__name",
             "td__price",
             "td__price td__price--none",
+            "td__where",
+            "td__where td--empty",
             "td__where td__where--purchased",
             "actionBox__actions--key-metric-breakdown",
             "note__text note__text--problem",

@@ -1,0 +1,5 @@
+async-lru
+beautifulsoup4
+discord
+python-dotenv
+watchfiles
