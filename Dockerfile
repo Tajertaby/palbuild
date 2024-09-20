@@ -1,4 +1,4 @@
-FROM python:3.13.0rc2-bookworm
+FROM python:3.12.6-bookworm
 WORKDIR /bot
 COPY . /bot
 RUN pip install -r requirements.txt
