@@ -1,5 +1,6 @@
 async-lru
 beautifulsoup4
 discord
+lxml
 python-dotenv
 watchfiles

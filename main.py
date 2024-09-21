@@ -12,7 +12,6 @@ from sessions import SessionManager
 # Load environment variables
 load_dotenv(r"E:\Discord Bot Files\secrets.env")
 DISCORD_TOKEN: str = os.getenv("DISCORD_TOKEN")
-BOT_PATH: str = r"E:\Discord Bot Files"
 COGS_PATH: str = r"E:\Discord Bot Files\cogs"
 
 # Retrieve a tuple of cog names and paths
