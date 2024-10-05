@@ -1,34 +1,38 @@
-import sqlite3
+import aiosqlite
 
-PCPP_MSG_IDS = {  # Used to reference in other files
-    "table_name": "pcpp_message_ids",
-    "user_msg_id": "user_msg_id",
-    "bot_msg_id": "bot_msg_id",
-    "content_id": "content_id",
-}
+class Tables:
+    def __init__(self, sql: str, *args) -> None:
+        self.sql = sql
+        self.args = args
 
+    async def cursor_execute(self) -> None:
+        self.cursor.execute(self.sql, self.args)
 
-async def setup_db():
-    async with sqlite3.connect("discord_db.db") as conn:
-        cursor = conn.cursor()
-    cursor.execute(  # Creates a parent table of message ids
+    @classmethod
+    def set_cursor(cls, cursor):
+        cls.cursor = cursor
+        
+async def setup_db() -> None:
+    async with aiosqlite.connect("discord_db.db") as conn:
+        Tables.set_cursor(conn.cursor())
+
+    Tables(
         """
-        CREATE TABLE IF NOT EXISTS ?(
-            ? INT,
-            ? INT,
-            ? INT UNIQUE,
+        CREATE TABLE IF NOT EXISTS pcpp_message_ids(
+            user_msg_id INT,
+            bot_msg_id INT,
+            content_id INT UNIQUE,
             PRIMARY KEY (user_msg_id, bot_msg_id)
         )
-        """,
-        tuple(PCPP_MSG_IDS[key] for key in PCPP_MSG_IDS),
-    )
+        """
+    ).cursor_execute()
 
-    cursor.execute(
+    Tables(
         """
         CREATE TABLE IF NOT EXISTS pcpp_contents(
             id INT PRIMARY KEY,
-            pcpp VARCHAR(4000)
-            FOREIGN KEY id REFERENCES ?.
+            pcpp VARCHAR(4000),
+            FOREIGN KEY id REFERENCES pcpp_message_ids(content_id)
         )
         """
-    )
+    ).cursor_execute()

@@ -7,6 +7,8 @@ import discord
 from discord.ext import commands
 from dotenv import load_dotenv
 from watchfiles import awatch, Change
+
+from db_setup import setup_db
 from sessions import SessionManager
 
 # Load environment variables
@@ -183,6 +185,7 @@ class DiscordBot(commands.Bot):
     async def setup_hook(self) -> None:
         """Sets up initial cogs and starts the file watcher."""
         logging.debug("Starting setup hook")
+        await setup_db() # Creates the neccessary databases if needed
         SessionManager.create_session()  # Start a session for network requests
         for cog_name, file_path in COGS:
             self.loop.create_task(FileManager.load_cog(cog_name, file_path))
