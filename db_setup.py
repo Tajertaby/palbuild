@@ -1,6 +1,8 @@
 import aiosqlite
 import asyncio
-import threading
+import logging
+
+SQL_LOG = logging.getLogger("sql")
 
 
 class Tables:
@@ -9,20 +11,35 @@ class Tables:
         self.args = args
 
     async def cursor_update_db(self) -> None:
-        for attempt in range (3,0,-1):
+        """
+        Executes queries that updates the database.
+        """
+        for attempt in range(3, 0, -1):
             try:
                 await self.cursor.execute(self.sql, self.args)
                 await self.conn.commit()  # Commit changes after executing
-                break # Stops the loop if successful
+                SQL_LOG.info("Successfully executed: %s", self.sql)
+                break  # Stops the loop if successful
             except aiosqlite.Error as e:
-                print(f"An error occurred: {e} \n {attempt-1} attempts left")  # Handle errors appropriately
-    
+                SQL_LOG.error(
+                    "SQL execution error: %s | Attempts left: %s", e, attempt - 1
+                )
+                if attempt == 1:
+                    raise e  # Re-raise the exception after the last attempt
+
     @classmethod
-    def db_variables(cls, conn, cursor):
+    def db_variables(
+        cls, conn: aiosqlite.Connection, cursor: aiosqlite.Connection.cursor
+    ) -> None:
         cls.conn = conn
         cls.cursor = cursor
 
-class TableGroup: # Helper class to group tables for organisation
+
+class TableGroup:
+    """
+    Helper class to group tables
+    """
+
     @staticmethod
     async def pcpp_tables():
         await Tables(
@@ -47,21 +64,25 @@ class TableGroup: # Helper class to group tables for organisation
         ).cursor_update_db()
 
 
-
-async def setup_db() -> None:
-    print(f"Setting up database in thread: {threading.get_ident()}")
+async def setup_db() -> bool:
+    """
+    Sets up the database by creating necessary tables.
+    If any table setup fails, it returns False.
+    """
+    SQL_LOG.info("Setting up the database")
     async with aiosqlite.connect("discord_db.db") as conn:
         async with conn.cursor() as cursor:
-            Tables.db_variables(conn, cursor) # Set these as class variables
+            Tables.db_variables(conn, cursor)  # Set these as class variables
 
             # Create tables
             try:
                 await TableGroup.pcpp_tables()
-            except aiosqlite.Error:
-                return False # This will be passed on the kill the bot if the tables are not setup
+            except aiosqlite.Error as e:
+                SQL_LOG.error("Failed to set up the database: %s", e)
+                return False  # This will be passed on the kill the bot if the tables are not setup
+            SQL_LOG.info("Database setup completed successfully.")
             return True
-                    
+
 
 if __name__ == "__main__":
-    print(f"Main thread: {threading.get_ident()}")
     asyncio.run(setup_db())

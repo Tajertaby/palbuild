@@ -1,6 +1,7 @@
 import asyncio
 import os
 import logging
+import sys
 from typing import Tuple, Set, Optional
 
 import discord
@@ -185,7 +186,11 @@ class DiscordBot(commands.Bot):
     async def setup_hook(self) -> None:
         """Sets up initial cogs and starts the file watcher."""
         logging.debug("Starting setup hook")
-        await setup_db() # Creates the neccessary databases if needed
+        setup_check = await setup_db() # Creates the neccessary databases if needed
+        if not setup_check: # Stops the bot from running if the database setup fails
+            logging.critical("Database setup failed, terminating connection to Discord and shutting down the program.")
+            await self.close()
+            sys.exit(1)
         SessionManager.create_session()  # Start a session for network requests
         for cog_name, file_path in COGS:
             self.loop.create_task(FileManager.load_cog(cog_name, file_path))
