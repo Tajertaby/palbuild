@@ -6,9 +6,9 @@ SQL_LOG = logging.getLogger("sql")
 
 
 class Tables:
-    def __init__(self, sql: str, *args) -> None:
+    def __init__(self, sql: str, params: tuple = None) -> None:
         self.sql = sql
-        self.args = args
+        self.params = params
 
     async def cursor_update_db(self) -> None:
         """
@@ -16,12 +16,12 @@ class Tables:
         """
         for attempt in range(3, 0, -1):
             try:
-                await self.cursor.execute(self.sql, self.args)
+                await self.cursor.execute(self.sql, self.params)
                 await self.conn.commit()  # Commit changes after executing
                 SQL_LOG.info("Successfully executed: %s", self.sql)
                 break  # Stops the loop if successful
             except aiosqlite.Error as e:
-                SQL_LOG.error(
+                SQL_LOG.exception(
                     "SQL execution error: %s | Attempts left: %s", e, attempt - 1
                 )
                 if attempt == 1:
@@ -47,19 +47,8 @@ class TableGroup:
             CREATE TABLE IF NOT EXISTS pcpp_message_ids(
                 user_msg_id INT,
                 bot_msg_id INT,
-                content_id INT UNIQUE,
                 PRIMARY KEY (user_msg_id, bot_msg_id)
-            )
-            """
-        ).cursor_update_db()
-
-        await Tables(
-            """
-            CREATE TABLE IF NOT EXISTS pcpp_contents(
-                id INT PRIMARY KEY,
-                        pcpp VARCHAR(4000),
-                FOREIGN KEY (id) REFERENCES pcpp_message_ids(content_id)
-            )
+            );
             """
         ).cursor_update_db()
 
@@ -70,19 +59,16 @@ async def setup_db() -> bool:
     If any table setup fails, it returns False.
     """
     SQL_LOG.info("Setting up the database")
-    async with aiosqlite.connect("discord_db.db") as conn:
-        async with conn.cursor() as cursor:
-            Tables.db_variables(conn, cursor)  # Set these as class variables
-
-            # Create tables
-            try:
-                await TableGroup.pcpp_tables()
-            except aiosqlite.Error as e:
-                SQL_LOG.error("Failed to set up the database: %s", e)
-                return False  # This will be passed on the kill the bot if the tables are not setup
-            SQL_LOG.info("Database setup completed successfully.")
-            return True
-
+    try:
+        async with aiosqlite.connect("discord_db.db") as conn:
+            async with conn.cursor() as cursor:
+                Tables.db_variables(conn, cursor)  # Set these as class variables
+                await TableGroup.pcpp_tables() # Create tables
+        SQL_LOG.info("Database setup completed successfully.")
+        return True
+    except (aiosqlite.OperationalError, aiosqlite.DatabaseError) as e:
+        SQL_LOG.error("Failed to set up the database: %s", e)
+        return False  # This will be passed on the kill the bot if the tables are not setup
 
 if __name__ == "__main__":
     asyncio.run(setup_db())

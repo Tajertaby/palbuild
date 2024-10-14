@@ -7,11 +7,14 @@ from sessions import SessionManager
 import discord
 from async_lru import alru_cache
 from aiohttp import ClientConnectionError, ClientPayloadError, ClientResponseError
+from aiosqlite import DatabaseError, OperationalError
 from bs4 import BeautifulSoup, SoupStrainer
 from discord.ext import commands
 
+from db_setup import SQL_LOG, Tables
+
 server = SessionManager.server  # Logger
-pcpp_log = logging.getLogger("pcpp_scraper")
+PCPP_LOG = logging.getLogger("pcpp_scraper")
 
 # Constants and regex patterns for identifying PCPartPicker URLs
 PCPP_VALID_URL_PATTERN: re.Pattern[str] = re.compile(
@@ -203,7 +206,6 @@ class PCPPScraper:
 
         return product_name, product_link
 
-
     def purchase_info(self, price_contents, merchant_contents: list) -> str:
         """
         Parse and format the purchase info.
@@ -215,17 +217,21 @@ class PCPPScraper:
             str: Price and merchant (if avaliable).
         """
 
-        if "alt=" in str(merchant_contents): # Retrieve merchant
+        if "alt=" in str(merchant_contents):  # Retrieve merchant
             price = f" - {price_contents[-2].text.strip()}"
             merchant = next(
-                (f" @{elem.img.get('alt')}" for elem in merchant_contents if "alt=" in str(elem)),
-            None,
+                (
+                    f" @{elem.img.get('alt')}"
+                    for elem in merchant_contents
+                    if "alt=" in str(elem)
+                ),
+                None,
             )
         else:
             if len(price_contents) < 2 or price_contents[-2].text == "No Prices":
                 price = " - No Prices Available"
             elif merchant_contents[-1] != "Purchased":
-                price= f" - {price_contents[-1].text} (Custom Price)"
+                price = f" - {price_contents[-1].text} (Custom Price)"
             else:
                 price = f" - {price_contents[-1].text} (Custom Price | Purchased)"
             merchant = ""
@@ -329,7 +335,7 @@ class PCPPScraper:
         if not all(
             [component_elements, product_elements, price_elements, wattage_element]
         ):
-            pcpp_log.error("Cannot parse the HTML due to missing elements.")
+            PCPP_LOG.error("Cannot parse the HTML due to missing elements.")
             return "HTML parsing error due to missing required HTML elements"
 
         try:
@@ -346,7 +352,7 @@ class PCPPScraper:
             )
             price_message = self.format_total_price(product_message, price_elements)
         except Exception as e:
-            pcpp_log.exception("HTML parsing error: %s", e)
+            PCPP_LOG.exception("HTML parsing error: %s", e)
             return f"HTML parsing error: {e}"
 
         pcpp_message = (
@@ -683,10 +689,30 @@ class PCPPCog(commands.Cog):
         pcpp_urls = PCPPUtility.extract_unique_pcpp_urls(message.content)
         invalid_link = INVALID_URL_PATTERN.search(message.content)
 
-        if pcpp_urls:
-            await self.handle_valid_links(message, pcpp_urls)
-        elif invalid_link:
-            await self.handle_invalid_links(message)
+        if pcpp_urls or invalid_link:
+            if pcpp_urls:
+                bot_message: discord.Message = await self.handle_valid_links(
+                    message, pcpp_urls
+                )
+
+            if invalid_link:
+                bot_message: discord.Message = await self.handle_invalid_links(message)
+
+            try:
+                await Tables(
+                    """
+                    INSERT INTO pcpp_message_ids(user_msg_id, bot_msg_id)
+                    VALUES(?, ?);
+                    """,
+                    (message.id, bot_message.id),  # First ID - User, Second ID - Bot
+                ).cursor_update_db()
+            except (OperationalError, DatabaseError) as e:
+                SQL_LOG.exception(
+                    "Failed to insert the following data.\nUser Message ID: %s\n Bot Message ID: %s\n Error:",
+                    message.id,
+                    bot_message.id,
+                    e,
+                )
 
     def create_preview_embed(self, urls: list[str]) -> discord.Embed:
         """
@@ -706,7 +732,7 @@ class PCPPCog(commands.Cog):
 
     async def handle_valid_links(
         self, message: discord.Message, pcpp_urls: list[str]
-    ) -> None:
+    ) -> discord.Message:
         """
         Handle valid PCPartPicker links by creating appropriate UI components.
 
@@ -725,9 +751,9 @@ class PCPPCog(commands.Cog):
             menu = PCPPMenu(message.channel.id, message.id, options)
             view.add_item(menu)
 
-        await message.reply(embed=preview_embed, view=view)
+        return await message.reply(embed=preview_embed, view=view)
 
-    async def handle_invalid_links(self, message: discord.Message) -> None:
+    async def handle_invalid_links(self, message: discord.Message) -> discord.Message:
         """
         Handle invalid PCPartPicker links by sending an error message.
 
@@ -743,7 +769,7 @@ class PCPPCog(commands.Cog):
             color=9806321,
         )
         error_embed.set_image(url="https://i.imgur.com/O0TFvRc.jpeg")
-        await message.reply(embed=error_embed)
+        return await message.reply(embed=error_embed)
 
 
 async def setup(bot: commands.Bot) -> None:
