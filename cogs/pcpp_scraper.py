@@ -11,7 +11,7 @@ from aiosqlite import DatabaseError, OperationalError
 from bs4 import BeautifulSoup, SoupStrainer
 from discord.ext import commands
 
-from db_setup import SQL_LOG, Tables
+from db_setup import SQL_LOG, Database
 
 server = SessionManager.server  # Logger
 PCPP_LOG = logging.getLogger("pcpp_scraper")
@@ -699,13 +699,13 @@ class PCPPCog(commands.Cog):
                 bot_message: discord.Message = await self.handle_invalid_links(message)
 
             try:
-                await Tables(
+                await Database(
                     """
                     INSERT INTO pcpp_message_ids(user_msg_id, bot_msg_id)
                     VALUES(?, ?);
                     """,
                     (message.id, bot_message.id),  # First ID - User, Second ID - Bot
-                ).cursor_update_db()
+                ).run_query()
             except (OperationalError, DatabaseError) as e:
                 SQL_LOG.exception(
                     "Failed to insert the following data.\nUser Message ID: %s\n Bot Message ID: %s\n Error:",

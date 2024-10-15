@@ -1,3 +1,4 @@
+aiosqlite
 async-lru
 beautifulsoup4
 discord

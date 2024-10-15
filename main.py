@@ -9,7 +9,7 @@ from discord.ext import commands
 from dotenv import load_dotenv
 from watchfiles import awatch, Change
 
-from db_setup import setup_db
+from db_setup import Database
 from sessions import SessionManager
 
 # Load environment variables
@@ -186,9 +186,13 @@ class DiscordBot(commands.Bot):
     async def setup_hook(self) -> None:
         """Sets up initial cogs and starts the file watcher."""
         logging.debug("Starting setup hook")
-        setup_check = await setup_db() # Creates the neccessary databases if needed
-        if not setup_check: # Stops the bot from running if the database setup fails
-            logging.critical("Database setup failed, terminating connection to Discord and shutting down the program.")
+        setup_check = (
+            await Database.setup_db()
+        )  # Creates the neccessary databases if needed
+        if not setup_check:  # Stops the bot from running if the database setup fails
+            logging.critical(
+                "Database setup failed, terminating connection to Discord and shutting down the program."
+            )
             await self.close()
             sys.exit(1)
         SessionManager.create_session()  # Start a session for network requests
@@ -200,10 +204,10 @@ class DiscordBot(commands.Bot):
     async def on_ready(self) -> None:
         """Logs when the bot is ready."""
         print(f"Logged in as {self.user} (ID: {self.user.id})")
-        print("------")
 
     async def close(self) -> None:
-        """Closes session when bot shuts down."""
+        """Closes database and network session when bot shuts down."""
+        await Database.close_db()
         await SessionManager.close_session()
         await super().close()
 
