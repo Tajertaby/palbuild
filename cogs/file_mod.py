@@ -38,9 +38,10 @@ class AutoMod(commands.Cog):
     }
     SUPPORT_CHANNEL_IDS: set[int] = {
         1138822177999835176,  # ID: #pc-building
-        1138821244876238878,  # ID: #prebuilts-laptops
+        1238376365917605941,  # ID: #hardware-troubleshoot
+        1275248718618300416,  # ID: #software-troubleshoot
         1138459224691703919,  # ID: #peripherals
-        1238376365917605941,  # ID: #troubleshooting
+        1138821244876238878,  # ID: #prebuilts-laptops
     }
 
     GIF: set[str] = {"GIF", "gif"}
