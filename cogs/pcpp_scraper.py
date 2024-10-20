@@ -1,8 +1,7 @@
 import logging
 import re
 import urllib.parse as parse
-from asyncio import TimeoutError
-from sessions import SessionManager
+from asyncio import TimeoutError as AsyncioTimeoutError
 
 import discord
 from async_lru import alru_cache
@@ -12,6 +11,7 @@ from bs4 import BeautifulSoup, SoupStrainer
 from discord.ext import commands
 
 from db_setup import SQL_LOG, Database
+from sessions import SessionManager
 
 server = SessionManager.server  # Logger
 PCPP_LOG = logging.getLogger("pcpp_scraper")
@@ -96,8 +96,8 @@ class PCPPScraper:
             )  # Filters the HTML for efficiency
             page = await SessionManager.request(url)
             return BeautifulSoup(page, "lxml", parse_only=strainer)
-        except TimeoutError as e:
-            raise TimeoutError(f"Web server timeout. URL={url}, {e}") from e
+        except AsyncioTimeoutError as e:
+            raise (f"Web server timeout. URL={url}, {e}") from e
         except ClientConnectionError as e:
             raise ClientConnectionError(
                 f"Could not connect to web server. URL={url}, {e}"
@@ -388,7 +388,7 @@ class PCPPScraper:
                 new_url_element = soup.find("span", class_="header-actions")
                 new_url_ending = new_url_element.a.get("href")
                 return f"{domain}{new_url_ending}"
-            except (TimeoutError, ClientConnectionError) as e:
+            except (AsyncioTimeoutError, ClientConnectionError) as e:
                 server.info("Retrying, %s attempts left: %s", attempt, e)
             except (ClientPayloadError, ClientResponseError) as e:
                 server.exception(e)
@@ -431,7 +431,7 @@ class PCPPScraper:
         for attempt in range(max_retries, 0, -1):
             try:
                 return await self.fetch_html_content(url, tag_names, classes)
-            except (TimeoutError, ClientConnectionError) as e:
+            except (AsyncioTimeoutError, ClientConnectionError) as e:
                 server.info("Retrying, %s attempts left: %s", attempt, e)
             except (ClientPayloadError, ClientResponseError) as e:
                 server.exception(e)
@@ -678,6 +678,9 @@ class PCPPCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
+    async def find_row_count(self):
+        self.pcpp_count_rows = await Database.count_rows("pcpp_message_ids")
+
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message) -> None:
         """
@@ -686,8 +689,10 @@ class PCPPCog(commands.Cog):
         Args:
             message (discord.Message): The Discord message object.
         """
+        bot_message = None
         pcpp_urls = PCPPUtility.extract_unique_pcpp_urls(message.content)
         invalid_link = INVALID_URL_PATTERN.search(message.content)
+        add_pcpp_data = True  # This boolean ensures data does not get added above tables max row limit
 
         if pcpp_urls or invalid_link:
             if pcpp_urls:
@@ -698,21 +703,48 @@ class PCPPCog(commands.Cog):
             if invalid_link:
                 bot_message: discord.Message = await self.handle_invalid_links(message)
 
-            try:
-                await Database(
-                    """
-                    INSERT INTO pcpp_message_ids(user_msg_id, bot_msg_id)
-                    VALUES(?, ?);
-                    """,
-                    (message.id, bot_message.id),  # First ID - User, Second ID - Bot
-                ).run_query()
-            except (OperationalError, DatabaseError) as e:
-                SQL_LOG.exception(
-                    "Failed to insert the following data.\nUser Message ID: %s\n Bot Message ID: %s\n Error:",
-                    message.id,
-                    bot_message.id,
-                    e,
-                )
+            print(self.pcpp_count_rows)
+            if (
+                self.pcpp_count_rows >= 2 and bot_message
+            ):  # Table cannot exceed 1000 rows
+                try:
+                    await Database(
+                        """
+                        DELETE FROM pcpp_message_ids
+                        WHERE (user_msg_id, bot_msg_id) = (SELECT user_msg_id, bot_msg_id FROM pcpp_message_ids LIMIT 1);
+                        """
+                    ).run_query()
+                except (OperationalError, DatabaseError) as e:
+                    SQL_LOG.exception("Cannot delete the row: %s", e)
+                    await Database.conn.rollback()
+                    add_pcpp_data = False
+                else:
+                    self.pcpp_count_rows -= 1
+                    add_pcpp_data = True
+                    print(self.pcpp_count_rows)
+
+                if add_pcpp_data:
+                    try:
+                        await Database(
+                            """
+                            INSERT INTO pcpp_message_ids(user_msg_id, bot_msg_id)
+                            VALUES(?, ?);
+                            """,
+                            (
+                                message.id,
+                                bot_message.id,
+                            ),  # First ID - User, Second ID - Bot
+                        ).run_query()
+                    except (OperationalError, DatabaseError) as e:
+                        SQL_LOG.exception(
+                            "Failed to insert the following data, rolling back.\nUser Message ID: %s\n Bot Message ID: %s\n Error: %s",
+                            message.id,
+                            bot_message.id,
+                            e,
+                        )
+                        await Database.conn.rollback()
+                    else:
+                        self.pcpp_count_rows += 1
 
     def create_preview_embed(self, urls: list[str]) -> discord.Embed:
         """
@@ -780,4 +812,6 @@ async def setup(bot: commands.Bot) -> None:
         bot (commands.Bot): The Discord bot instance.
     """
     bot.add_dynamic_items(PCPPButton, PCPPMenu)
-    await bot.add_cog(PCPPCog(bot))
+    cog_instance = PCPPCog(bot)
+    await bot.add_cog(cog_instance)
+    await cog_instance.find_row_count()

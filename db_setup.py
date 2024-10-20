@@ -1,7 +1,8 @@
-import aiosqlite
-import asyncio
 import logging
 from textwrap import dedent
+from typing import Union, List, Tuple
+
+import aiosqlite
 
 SQL_LOG = logging.getLogger("sql")
 
@@ -11,7 +12,7 @@ class Database:
         self.sql = dedent(sql)  # Used to easily check which type of SQL query
         self.params = params
 
-    async def run_query(self) -> None:
+    async def run_query(self) -> Union[None, List[Tuple]]:
         """
         Executes queries that updates the database.
         """
@@ -20,7 +21,11 @@ class Database:
                 await self.cursor.execute(self.sql, self.params)
                 if not self.sql.startswith("SELECT"):
                     await self.conn.commit()
-                SQL_LOG.info("Successfully executed: %s", self.sql)
+                    SQL_LOG.info("Successfully executed: %s", self.sql)
+                else:
+                    rows = await self.cursor.fetchall()
+                    SQL_LOG.info("Successfully executed: %s", self.sql)
+                    return rows
                 break  # Stops the loop if successful
             except aiosqlite.Error as e:
                 SQL_LOG.exception(
@@ -28,11 +33,12 @@ class Database:
                 )
                 if attempt == 1:
                     raise e  # Re-raise the exception after the last attempt
-
+ 
     @classmethod
     async def count_rows(cls, table_name) -> int:
         try:
-            return await cls("SELECT Count(*) FROM ?", (table_name,)).run_query()
+            pcpp_count_rows = await cls(f"SELECT Count(*) FROM {table_name};").run_query()
+            return int(pcpp_count_rows[0][0]) # Convert from list of tuples to int
         except (aiosqlite.OperationalError, aiosqlite.DatabaseError) as e:
             SQL_LOG.exception("Failed to count rows: %s", e)
 
@@ -47,11 +53,13 @@ class Database:
             cls.conn: aiosqlite.Connection = await aiosqlite.connect("discord_db.db")
             cls.cursor: aiosqlite.Connection.cursor = await cls.conn.cursor()
             await TableGroup.pcpp_tables()  # Create tables
-            SQL_LOG.info("Database setup completed successfully.")
-            return True
         except (aiosqlite.OperationalError, aiosqlite.DatabaseError) as e:
             SQL_LOG.error("Failed to set up the database: %s", e)
+            await Database.conn.rollback()
             return False  # This will be passed on the kill the bot if the tables are not setup
+        else:
+            SQL_LOG.info("Database setup completed successfully.")
+            return True
 
     @classmethod
     async def close_db(cls):
