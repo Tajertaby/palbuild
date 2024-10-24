@@ -167,7 +167,7 @@ class FileManager:
 
             if change_type != Change.deleted:
                 cog_validated = await cls.validate_cog(file_path)
-            if change_type == Change.added and cog_validated:
+            elif change_type == Change.added and cog_validated:
                 await cls.load_cog(cog, file_path)
             elif change_type == Change.modified and cog_validated:
                 await cls.reload_cog(cog, file_path)

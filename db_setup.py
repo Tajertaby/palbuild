@@ -12,33 +12,39 @@ class Database:
         self.sql = dedent(sql)  # Used to easily check which type of SQL query
         self.params = params
 
-    async def run_query(self) -> Union[None, List[Tuple]]:
+    async def run_query(self, auto_commit=True) -> Union[int, List[Tuple]]:
         """
         Executes queries that updates the database.
         """
         for attempt in range(3, 0, -1):
             try:
                 await self.cursor.execute(self.sql, self.params)
-                if not self.sql.startswith("SELECT"):
+                if not self.sql.startswith("SELECT") and auto_commit:
                     await self.conn.commit()
-                    SQL_LOG.info("Successfully executed: %s", self.sql)
-                else:
+                    SQL_LOG.info("Successfully executed and commited: %s", self.sql)
+                    return self.cursor.rowcount # Returns no of rows affected
+                elif self.sql.startswith("SELECT"):
                     rows = await self.cursor.fetchall()
                     SQL_LOG.info("Successfully executed: %s", self.sql)
                     return rows
-                break  # Stops the loop if successful
+                else: # This happens when auto commit is false
+                    SQL_LOG.info("Successfully executed: %s", self.sql)
+                    return self.cursor.rowcount
             except aiosqlite.Error as e:
+                await self.conn.rollback()
                 SQL_LOG.exception(
                     "SQL execution error: %s | Attempts left: %s", e, attempt - 1
                 )
                 if attempt == 1:
-                    raise e  # Re-raise the exception after the last attempt
- 
+                    raise e # Re-raise the exception after the last attempt
+            else:
+                break # Stops the loop if successful
+
     @classmethod
     async def count_rows(cls, table_name) -> int:
         try:
-            pcpp_count_rows = await cls(f"SELECT Count(*) FROM {table_name};").run_query()
-            return int(pcpp_count_rows[0][0]) # Convert from list of tuples to int
+            count_rows = await cls(f"SELECT DISTINCT Count(*) FROM {table_name};").run_query()
+            return int(count_rows[0][0]) # Convert from list of tuples to int
         except (aiosqlite.OperationalError, aiosqlite.DatabaseError) as e:
             SQL_LOG.exception("Failed to count rows: %s", e)
 
@@ -62,7 +68,7 @@ class Database:
             return True
 
     @classmethod
-    async def close_db(cls):
+    async def close_db(cls) -> None:
         """
         Ensure the cursor and connection are closed
         """

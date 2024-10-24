@@ -679,7 +679,7 @@ class PCPPCog(commands.Cog):
         self.bot = bot
 
     async def find_row_count(self):
-        self.pcpp_count_rows = await Database.count_rows("pcpp_message_ids")
+        self.pcpp_user_message_count = await Database.count_rows("pcpp_message_ids")
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message) -> None:
@@ -689,42 +689,30 @@ class PCPPCog(commands.Cog):
         Args:
             message (discord.Message): The Discord message object.
         """
-        bot_message = None
-        pcpp_urls = PCPPUtility.extract_unique_pcpp_urls(message.content)
-        invalid_link = INVALID_URL_PATTERN.search(message.content)
-        add_pcpp_data = True  # This boolean ensures data does not get added above tables max row limit
-
-        if pcpp_urls or invalid_link:
-            if pcpp_urls:
-                bot_message: discord.Message = await self.handle_valid_links(
-                    message, pcpp_urls
-                )
-
-            if invalid_link:
-                bot_message: discord.Message = await self.handle_invalid_links(message)
-
-            print(self.pcpp_count_rows)
-            if (
-                self.pcpp_count_rows >= 2 and bot_message
-            ):  # Table cannot exceed 1000 rows
+        MAX_USER_MESSAGE_ID_COUNT = 3
+        # This list can contain the PCPP list or the link invalid response.
+        bot_message_list = await self.pcpp_link_finder(message)
+        
+        if any(bot_message_list):
+            print(bot_message_list)
+            if self.pcpp_user_message_count >= MAX_USER_MESSAGE_ID_COUNT:  # Table cannot exceed 1000 rows
+                print(self.pcpp_user_message_count)
                 try:
                     await Database(
                         """
                         DELETE FROM pcpp_message_ids
-                        WHERE (user_msg_id, bot_msg_id) = (SELECT user_msg_id, bot_msg_id FROM pcpp_message_ids LIMIT 1);
+                        WHERE user_msg_id = (SELECT user_msg_id FROM pcpp_message_ids LIMIT 1);
                         """
                     ).run_query()
                 except (OperationalError, DatabaseError) as e:
                     SQL_LOG.exception("Cannot delete the row: %s", e)
-                    await Database.conn.rollback()
-                    add_pcpp_data = False
                 else:
-                    self.pcpp_count_rows -= 1
-                    add_pcpp_data = True
-                    print(self.pcpp_count_rows)
+                    self.pcpp_user_message_count -= 1
 
-                if add_pcpp_data:
-                    try:
+            if self.pcpp_user_message_count <= MAX_USER_MESSAGE_ID_COUNT -1:
+                try:
+                    for bot_message in bot_message_list:
+                    # A for loop is there so if needed so we can store the IDs of both the list preview and link invalid message. 
                         await Database(
                             """
                             INSERT INTO pcpp_message_ids(user_msg_id, bot_msg_id)
@@ -733,18 +721,44 @@ class PCPPCog(commands.Cog):
                             (
                                 message.id,
                                 bot_message.id,
-                            ),  # First ID - User, Second ID - Bot
-                        ).run_query()
-                    except (OperationalError, DatabaseError) as e:
-                        SQL_LOG.exception(
-                            "Failed to insert the following data, rolling back.\nUser Message ID: %s\n Bot Message ID: %s\n Error: %s",
-                            message.id,
-                            bot_message.id,
-                            e,
-                        )
-                        await Database.conn.rollback()
-                    else:
-                        self.pcpp_count_rows += 1
+                            ), # First ID - User, Second ID - Bot
+                        ).run_query(auto_commit=False)
+                except (OperationalError, DatabaseError) as e:
+                    SQL_LOG.exception(
+                        "Failed to insert the following data, rolling back.\nUser Message ID: %s\n Bot Message ID: %s\n Error: %s",
+                        message.id,
+                        bot_message.id,
+                        e,
+                    )
+                else:
+                    self.pcpp_user_message_count += 1
+                    await Database.conn.commit()
+
+    @commands.Cog.listener()
+    async def on_message_edit(self, before:discord.Message, after:discord.Message):
+        """
+        'before' contains the message before the edit
+        'after' contains the message after the edit
+        """
+
+        # Ignore if content hasn't changed
+        if before.content == after.content:
+            return
+        
+        try:
+            bot_msg_id = await Database(
+                """
+                SELECT bot_msg_id FROM pcpp_message_ids
+                WHERE user_msg_id = "?";
+                """,
+                (before.id,)).run_query()
+        except (OperationalError, DatabaseError) as e:
+            SQL_LOG.exception(
+                "Failed to search the corresponding bot message id from the user message: %s\n Error: %s",
+                before.id,
+                e,
+            )
+        
 
     def create_preview_embed(self, urls: list[str]) -> discord.Embed:
         """
@@ -802,7 +816,30 @@ class PCPPCog(commands.Cog):
         )
         error_embed.set_image(url="https://i.imgur.com/O0TFvRc.jpeg")
         return await message.reply(embed=error_embed)
+    
+    async def pcpp_link_finder(self, message: discord.Message) -> list[discord.Message]:
+        """
+        Args:
+            message (discord.Message): The Discord message object.
+        Returns:
+            bot_message_list discord.Message: Message object of the bot's reply.
+        """
+        bot_message_list = []
+        pcpp_urls = PCPPUtility.extract_unique_pcpp_urls(message.content)
+        invalid_link = INVALID_URL_PATTERN.search(message.content)
+        
+        if pcpp_urls or invalid_link:
+            if pcpp_urls:
+                bot_message: discord.Message = await self.handle_valid_links(
+                    message, pcpp_urls
+                )
+                bot_message_list.append(bot_message)
 
+            if invalid_link:
+                invalid_bot_message: discord.Message = await self.handle_invalid_links(message)
+                bot_message_list.append(invalid_bot_message)
+            
+        return bot_message_list
 
 async def setup(bot: commands.Bot) -> None:
     """
