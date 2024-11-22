@@ -147,6 +147,7 @@ class FileManager:
     async def observer(cls, changes: Set[Tuple[Change, str]]) -> None:
         """
         Processes file changes and determines which actions to take for each cog.
+        Processes file changes and determines which actions to take for each cog.
         """
         for change_type, file_path in changes:
             if not file_path.endswith(".py") or os.path.isdir(file_path):

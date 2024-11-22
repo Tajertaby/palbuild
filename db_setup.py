@@ -29,7 +29,6 @@ class Database:
                     SQL_LOG.info("Successfully executed: %s", self.sql)
                     return rows
                 else: # This happens when auto commit is false
-                    print(os.path.abspath("discord_db"))
                     SQL_LOG.info("Successfully executed: %s", self.sql)
                     return self.cursor.rowcount
             except aiosqlite.Error as e:
@@ -91,9 +90,12 @@ class TableGroup:
             """
             CREATE TABLE IF NOT EXISTS pcpp_message_ids(
                 user_msg_id INT,
-                bot_msg_id INT,
+                pcpp_bot_msg_id INT,
+                invalid_msg_id INT,
                 channel_id INT,
-                PRIMARY KEY (user_msg_id, bot_msg_id, channel_id)
+                pcpp_preview BOOLEAN,
+                invalid_link BOOLEAN,
+                PRIMARY KEY (user_msg_id)
             );
             """
         ).run_query()
