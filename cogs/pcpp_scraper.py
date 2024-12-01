@@ -724,21 +724,74 @@ class PCPPMessage:
     @staticmethod
     @alru_cache(maxsize=1024)
     async def extract_bot_msg_using_user_id(
-        bot, message_ids, channel_id
+        bot, bot_msg_ids, channel_id
     ) -> discord.Message:
         channel = bot.get_channel(channel_id)
-        return [await channel.fetch_message(message_id) for message_id in message_ids]
+        return [await channel.fetch_message(message_id) for message_id in bot_msg_ids]
+    
+    @staticmethod
+    async def insert_bot_msg_ids(
+        pcpp_message_id,
+        invalid_bot_message_id,
+        user_message_id,
+        channel_id,
+    ):
+
+        if (
+            PCPPCog.pcpp_user_message_count >= PCPPCog.MAX_USER_MESSAGE_ID_COUNT
+        ):  # Table cannot exceed 1000 rows
+            try:
+                await Database(
+                    """
+                    DELETE FROM pcpp_message_ids
+                    WHERE user_msg_id = (SELECT user_msg_id FROM pcpp_message_ids LIMIT 1);
+                    """
+                ).run_query()
+            except (OperationalError, DatabaseError) as e:
+                SQL_LOG.exception("Cannot delete the row: %s", e)
+            else:
+                PCPPCog.pcpp_user_message_count -= 1
+
+        if PCPPCog.pcpp_user_message_count <= PCPPCog.MAX_USER_MESSAGE_ID_COUNT - 1:
+            try:
+                await Database(
+                    """
+                    INSERT INTO pcpp_message_ids(user_msg_id, pcpp_bot_msg_id, invalid_msg_id, channel_id)
+                    VALUES(?, ?, ?, ?);
+                    """,
+                    (
+                        user_message_id,
+                        pcpp_message_id,
+                        invalid_bot_message_id,
+                        channel_id,
+                    ),  # First ID - User, Second ID - Bot
+                ).run_query(auto_commit=False)
+            except (OperationalError, DatabaseError) as e:
+                SQL_LOG.exception(
+                    "Failed to insert the following data, rolling back.\nUser Message ID: %s\n PCPP Preview Message ID: %s\n Invalid Message ID: %s\n Channel ID: %s\n Error: %s",
+                    user_message_id,
+                    pcpp_message_id,
+                    invalid_bot_message_id,
+                    channel_id,
+                    e,
+                )
+            else:
+                PCPPCog.pcpp_user_message_count += 1
+                await Database.conn.commit()
 
     @staticmethod
-    async def find_bot_msg_ids_and_bool(user_msg_id: int):
+    async def find_bot_msg_ids(user_msg_id: int):
         try:
-            message_info = await Database(
-                """
-                SELECT pcpp_bot_msg_id, channel_id, pcpp_preview, invalid_link FROM pcpp_message_ids
-                WHERE user_msg_id = "?";
+            pcpp_bot_msg_id, invalid_msg_id, channel_id = tuple(
+                await Database(
+                    """
+                SELECT pcpp_bot_msg_id, invalid_msg_idgi FROM pcpp_message_ids
+                WHERE user_msg_id = ?;
                 """,
-                (user_msg_id,),
-            ).run_query()
+                    (user_msg_id,),
+                ).run_query()
+            )
+            print(user_msg_id)
         except (OperationalError, DatabaseError) as e:
             SQL_LOG.exception(
                 "Failed to search the corresponding bot message id, channel_id and booleans from the user message: %s\n Error: %s",
@@ -746,12 +799,12 @@ class PCPPMessage:
                 e,
             )
             raise Error from e
-        return tuple(message_info)
+        return [pcpp_bot_msg_id, invalid_msg_id], channel_id
 
     @staticmethod
-    async def edit_pcpp_preview(bot, message_ids, channel_id, message, pcpp_urls):
+    async def edit_pcpp_preview(bot, bot_msg_ids, channel_id, message, pcpp_urls):
         bot_message: discord.Message = PCPPMessage.extract_bot_msg_using_user_id(
-            bot, message_ids, channel_id
+            bot, bot_msg_ids, channel_id
         )[0]
         preview_embed, view = HandleLinks.handle_valid_links(
             message.channel.id, message.id, pcpp_urls
@@ -759,9 +812,9 @@ class PCPPMessage:
         await bot_message.edit(preview_embed, view)
 
     @staticmethod
-    async def edit_invalid_link(bot, message_ids, channel_id):
+    async def edit_invalid_link(bot, bot_msg_ids, channel_id):
         bot_message: discord.Message = PCPPMessage.extract_bot_msg_using_user_id(
-            bot, message_ids, channel_id
+            bot, bot_msg_ids, channel_id
         )[-1]
         error_embed = HandleLinks.handle_invalid_links()
         await bot_message.edit(error_embed)
@@ -786,6 +839,132 @@ class PCPPMessage:
             return await message.reply(embed=embed)
         else:
             return await message.edit(embed=embed)
+
+    @staticmethod
+    async def delete_message(bot, user_msg_id, bot_msg_ids, channel_id) -> None:
+        channel = await bot.get_channel(channel_id)
+        try:
+            await Database(
+                """
+                DELETE FROM pcpp_message_ids
+                WHERE user_msg_id = ?;
+                """,
+                (user_msg_id,),
+            ).run_query()
+            for message_id in bot_msg_ids:
+                message = await channel.fetch_message(message_id)
+                await message.delete()
+        except (OperationalError, DatabaseError) as e:
+            SQL_LOG.exception(
+                "Cannot delete the row containing user id or delete the message: %s. Error: %s",
+                user_msg_id,
+                e,
+            )
+        else:
+            PCPPCog.pcpp_user_message_count -= 1
+
+    @staticmethod
+    async def edit_pcpp_message(
+        bot,
+        message: discord.Message,
+        pcpp_bools: tuple,
+        before_pcpp_bools: tuple,
+        bot_msg_ids=None,
+        channel_id_to_fetch=None,
+    ) -> discord.Message:
+        """
+        Args:
+            message (discord.Message): The Discord message object.
+        Returns:
+            bot_message_list discord.Message: Message object of the bot's reply.
+        """
+        
+        pcpp_urls, invalid_link = pcpp_bools
+        if not any((pcpp_urls, invalid_link)):
+            return
+        before_pcpp_urls, before_invalid_link = before_pcpp_bools
+
+        if (all([pcpp_urls, not invalid_link]) and all(before_pcpp_bools)) or (
+            all([pcpp_urls, not invalid_link, before_invalid_link])
+        ):
+            await PCPPMessage.edit_pcpp_preview(
+                bot, bot_msg_ids, message, pcpp_urls, channel_id_to_fetch
+            )
+            await PCPPMessage.placeholder_message(
+                message, no_invalid_links=True, edit=True
+            )
+
+        elif all([not pcpp_urls, invalid_link]) and all(before_pcpp_bools):
+            await PCPPMessage.placeholder_message(
+                message, no_pcpp_preview=True, edit=True
+            )
+
+        elif (
+            (all([pcpp_urls, invalid_link]) and all(before_pcpp_bools))
+            or (all([pcpp_urls, not invalid_link, before_pcpp_urls]))
+            or (all([pcpp_urls, invalid_link, before_invalid_link]))
+        ):
+            await PCPPMessage.edit_pcpp_preview(
+                bot, bot_msg_ids, message, pcpp_urls, channel_id_to_fetch
+            )
+
+        elif all([pcpp_urls, invalid_link, before_pcpp_urls]):
+            await PCPPMessage.edit_pcpp_preview(
+                bot, bot_msg_ids, message, pcpp_urls, channel_id_to_fetch
+            )
+            await PCPPMessage.edit_invalid_link(
+                bot, bot_msg_ids, channel_id_to_fetch
+            )
+
+        elif all([not pcpp_urls, invalid_link, before_pcpp_urls]):
+            await PCPPMessage.placeholder_message(
+                message, no_pcpp_preview=True, edit=True
+            )
+            await PCPPMessage.edit_invalid_link(
+                bot, bot_msg_ids, channel_id_to_fetch
+            )
+
+        elif all([not pcpp_urls, invalid_link, before_invalid_link]):
+            return
+
+    @staticmethod
+    async def prepare_new_message(
+        message: discord.Message,
+        pcpp_bools: tuple,
+    ) -> None:
+        pcpp_message = None
+        invalid_bot_message = None
+        pcpp_urls, invalid_link = pcpp_bools
+        if not any((pcpp_urls, invalid_link)):
+            return
+
+        if pcpp_urls:
+            preview_embed, view = HandleLinks.handle_valid_links(
+                message.channel.id, message.id, pcpp_urls
+            )
+            pcpp_message: discord.Message = await message.reply(
+                embed=preview_embed, view=view
+            )
+        elif not pcpp_urls:
+            pcpp_message = await PCPPMessage.placeholder_message(
+                message, no_pcpp_preview=True
+            )
+        if invalid_link:
+            error_embed = HandleLinks.handle_invalid_links()
+            invalid_bot_message: discord.Message = await message.reply(
+                embed=error_embed
+            )
+        elif not invalid_link:
+            invalid_bot_message = await PCPPMessage.placeholder_message(
+                message, no_invalid_links=True
+            )
+        
+        await PCPPMessage.insert_bot_msg_ids(
+            pcpp_message.id,
+            invalid_bot_message.id,
+            message.id,
+            message.channel.id,
+        )
 
     @staticmethod
     def create_preview_embed(urls: list[str]) -> discord.Embed:
@@ -817,16 +996,14 @@ class PCPPCog(commands.Cog):
     Cog for handling PCPartPicker list previews in Discord.
     """
 
-    pcpp_links_cache = {}
-
-    PCPP_LINKS_MAX_CACHE = 1024
     MAX_USER_MESSAGE_ID_COUNT = 2
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-    async def find_row_count(self):
-        self.pcpp_user_message_count = await Database.count_rows("pcpp_message_ids")
+    @classmethod
+    async def find_row_count(cls):
+        cls.pcpp_user_message_count = await Database.count_rows("pcpp_message_ids")
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message) -> None:
@@ -841,16 +1018,8 @@ class PCPPCog(commands.Cog):
 
         # This list can contain the PCPP list or the link invalid response.
         pcpp_urls, invalid_link = self.pcpp_regex_search(message.content)
-        pcpp_message_id, invalid_bot_message_id = await self.pcpp_message_manage(
-            message, pcpp_urls, invalid_link
-        )
-        await self.insert_message_ids(
-            pcpp_message_id,
-            invalid_bot_message_id,
-            message.id,
-            message.channel.id,
-            pcpp_urls,
-            invalid_link,
+        await PCPPMessage.prepare_new_message(
+            message, pcpp_bools=(pcpp_urls, invalid_link)
         )
 
     @commands.Cog.listener()
@@ -863,234 +1032,48 @@ class PCPPCog(commands.Cog):
         if before.content == after.content:
             return
 
-        find_links_in_cache = PCPPCog.pcpp_links_cache.get(after.id)
         pcpp_urls, invalid_link = self.pcpp_regex_search(after.content)
-        if any(find_links_in_cache) and any([pcpp_urls, invalid_link]):
+        before_pcpp_urls, before_invalid_link = self.pcpp_regex_search(before.content)
+        bot_msg_ids, channel_id_to_fetch = await PCPPMessage.find_bot_msg_ids(after.id)
+        if not all([all(bot_msg_ids), channel_id_to_fetch]):
+            return # Cannot edit message without a valid bot/channel id
+        if any([before_pcpp_urls, before_invalid_link]) and any(
+            [pcpp_urls, invalid_link]
+        ):
             # This list can contain the PCPP list or the link invalid response.
-            new_message_link_set = {pcpp_url for pcpp_url in pcpp_urls}.add(
-                invalid_link
-            )
-            if (
-                set(find_links_in_cache) == new_message_link_set
-            ):  # This checks if the lists found in dict are all still in new message
+            if (before_pcpp_urls, before_invalid_link) == (pcpp_urls, invalid_link):
+                # This checks if the lists found in dict are all still in new message
                 return
             else:
-                await self.pcpp_message_manage(
-                    after, pcpp_urls, invalid_link, edit=True
+                await PCPPMessage.edit_pcpp_message(
+                    self.bot,
+                    message = after,
+                    pcpp_bools=(pcpp_urls, invalid_link),
+                    before_pcpp_bools=(before_pcpp_urls, before_invalid_link),
+                    bot_msg_ids=bot_msg_ids,
+                    channel_id_to_fetch=channel_id_to_fetch,
                 )
-        elif find_links_in_cache and not any([pcpp_urls, invalid_link]):
-            pass
-            # Delete message, cache and data in database
-        elif not find_links_in_cache and any([pcpp_urls, invalid_link]):
-            pcpp_message_id, invalid_bot_message_id = await self.pcpp_message_manage(
-                after, pcpp_urls, invalid_link
-            )
-            await self.insert_message_ids(
-                pcpp_message_id,
-                invalid_bot_message_id,
-                after.id,
-                after.channel.id,
-                pcpp_urls,
-                invalid_link,
-            )
-        else:
-            return
-
-    async def pcpp_message_manage(
-        self, message: discord.Message, pcpp_urls, invalid_link, edit: bool = False
-    ) -> discord.Message:
-        """
-        Args:
-            message (discord.Message): The Discord message object.
-        Returns:
-            bot_message_list discord.Message: Message object of the bot's reply.
-        """
-        pcpp_message = None
-        invalid_bot_message = None
-        message_ids = None
-        pcpp_urls_previous_track, invalid_link_bool_previous_track = (
-            previous_reply_tracker
-        ) = (None, None)
-        channel_id_to_fetch = None
-
-        if edit:
-            (
-                message_ids,
-                channel_id_to_fetch,
-                pcpp_urls_previous_track,
-                invalid_link_bool_previous_track,
-            ) = await PCPPMessage.find_bot_msg_ids_and_bool(message.id)
-            previous_reply_tracker = (
-                pcpp_urls_previous_track,
-                invalid_link_bool_previous_track,
-            )
-
-        if not any((pcpp_urls, invalid_link)):
-            return
-
-        if not edit and pcpp_urls:
-            preview_embed, view = HandleLinks.handle_valid_links(
-                message.channel.id, message.id, pcpp_urls
-            )
-            pcpp_message: discord.Message = await message.reply(
-                embed=preview_embed, view=view
-            )
-        elif not edit and not pcpp_urls:
-            pcpp_message = await PCPPMessage.placeholder_message(
-                message, no_pcpp_preview=True
-            )
-        if not edit and invalid_link:
-            error_embed = HandleLinks.handle_invalid_links()
-            invalid_bot_message: discord.Message = await message.reply(
-                embed=error_embed
-            )
-        elif not invalid_link:
-            invalid_link = ""
-            if not edit:
-                invalid_bot_message = await PCPPMessage.placeholder_message(
-                    message, no_invalid_links=True
-                )
-
-        if (
-            all([edit, pcpp_urls, not invalid_link]) and all(previous_reply_tracker)
-        ) or (
-            all([edit, pcpp_urls, not invalid_link, invalid_link_bool_previous_track])
+        elif any([before_pcpp_urls, before_invalid_link]) and not any(
+            [pcpp_urls, invalid_link]
         ):
-            await PCPPMessage.edit_pcpp_preview(
-                self.bot, message_ids, message, pcpp_urls, channel_id_to_fetch
+            PCPPMessage.delete_message(
+                self.bot, after.id, bot_msg_ids, channel_id_to_fetch
             )
-            preview_embed = await PCPPMessage.placeholder_message(
-                message, no_invalid_links=True, edit=True
-            )
-
-        elif all([edit, not pcpp_urls, invalid_link]) and all(previous_reply_tracker):
-            preview_embed = await PCPPMessage.placeholder_message(
-                message, no_pcpp_preview=True, edit=True
-            )
-
-        elif (
-            (all([edit, pcpp_urls, invalid_link]) and all(previous_reply_tracker))
-            or (all([edit, pcpp_urls, not invalid_link, pcpp_urls_previous_track]))
-            or (all([edit, pcpp_urls, invalid_link, invalid_link_bool_previous_track]))
-        ):
-            await PCPPMessage.edit_pcpp_preview(
-                self.bot, message_ids, message, pcpp_urls, channel_id_to_fetch
-            )
-
-        elif all([edit, pcpp_urls, invalid_link, pcpp_urls_previous_track]):
-            await PCPPMessage.edit_pcpp_preview(
-                self.bot, message_ids, message, pcpp_urls, channel_id_to_fetch
-            )
-            await PCPPMessage.edit_invalid_link(
-                self.bot, message_ids, channel_id_to_fetch
-            )
-
-        elif all([edit, not pcpp_urls, invalid_link, pcpp_urls_previous_track]):
-            preview_embed = await PCPPMessage.placeholder_message(
-                message, no_pcpp_preview=True, edit=True
-            )
-            await PCPPMessage.edit_invalid_link(
-                self.bot, message_ids, channel_id_to_fetch
-            )
-
-        elif all([edit, not pcpp_urls, invalid_link, invalid_link_bool_previous_track]):
-            return
-
-        else:
-            pass  #
-
-        if (
-            edit
-        ):  # This condition is needed after when the PCPP messages are edited to ensure that the database data can change along with it.
-            await self.change_message_ids(message.id, pcpp_message, invalid_bot_message)
-
-        if (
-            len(PCPPCog.pcpp_links_cache) >= PCPPCog.PCPP_LINKS_MAX_CACHE
-        ):  # Enforces an item limit on cache
-            first_key = list(PCPPCog.pcpp_links_cache)[0]
-            PCPPCog.pcpp_links_cache.pop(first_key)
-
-        if pcpp_urls or invalid_link:
-            print(pcpp_urls.copy())
-            PCPPCog.pcpp_links_cache[message.id] = pcpp_urls.copy().append(invalid_link)
-            print(PCPPCog.pcpp_links_cache, 1)
-
-        if (pcpp_message and invalid_bot_message) is not None:
-            return pcpp_message.id, invalid_bot_message.id
         else:
             return
 
-    async def insert_message_ids(
-        self,
-        pcpp_message_id,
-        invalid_bot_message_id,
-        user_message_id,
-        channel_id,
-        pcpp_preview,
-        invalid_link,
-    ):
+    @commands.Cog.listener()
+    async def on_message_delete(self, message):
+        bot_msg_ids, channel_id_to_fetch = await PCPPMessage.find_bot_msg_ids(
+            message.id
+        )
+        if not all([all(bot_msg_ids), channel_id_to_fetch]):
+            return # Cannot edit message without a valid bot/channel id
+        PCPPMessage.delete_message(
+            self.bot, message.id, bot_msg_ids, channel_id_to_fetch
+        )
 
-        if (
-            self.pcpp_user_message_count >= self.MAX_USER_MESSAGE_ID_COUNT
-        ):  # Table cannot exceed 1000 rows
-            try:
-                await Database(
-                    """
-                    DELETE FROM pcpp_message_ids
-                    WHERE user_msg_id = (SELECT user_msg_id FROM pcpp_message_ids LIMIT 1);
-                    """
-                ).run_query()
-            except (OperationalError, DatabaseError) as e:
-                SQL_LOG.exception("Cannot delete the row: %s", e)
-            else:
-                self.pcpp_user_message_count -= 1
-
-        if self.pcpp_user_message_count <= self.MAX_USER_MESSAGE_ID_COUNT - 1:
-            try:
-                await Database(
-                    """
-                    INSERT INTO pcpp_message_ids(user_msg_id, pcpp_bot_msg_id, invalid_msg_id, channel_id, pcpp_preview, invalid_link)
-                    VALUES(?, ?, ?, ?, ?, ?);
-                    """,
-                    (
-                        user_message_id,
-                        pcpp_message_id,
-                        invalid_bot_message_id,
-                        channel_id,
-                        bool(pcpp_preview),
-                        bool(invalid_link),
-                    ),  # First ID - User, Second ID - Bot
-                ).run_query(auto_commit=False)
-            except (OperationalError, DatabaseError) as e:
-                SQL_LOG.exception(
-                    "Failed to insert the following data, rolling back.\nUser Message ID: %s\n PCPP Preview Message ID: %s\n Invalid Message ID: %s\n Channel ID: %s\n Error: %s",
-                    user_message_id,
-                    pcpp_message_id,
-                    invalid_bot_message_id,
-                    channel_id,
-                    e,
-                )
-            else:
-                self.pcpp_user_message_count += 1
-                await Database.conn.commit()
-
-    async def change_message_ids(self, user_message_id, pcpp_preview, invalid_link):
-        try:
-            await Database(
-                """
-                UPDATE pcpp_message_ids
-                SET pcpp_preview = ?, invalid_link = ?
-                WHERE user_msg_id = ?
-                """,
-                (pcpp_preview, invalid_link, user_message_id),
-            )
-        except (OperationalError, DatabaseError) as e:
-            SQL_LOG.exception(
-                "Failed to insert the update data, rolling back.\nUser Message ID: %s",
-                user_message_id,
-                e,
-            )
-
+    @lru_cache(maxsize=1024)
     def pcpp_regex_search(self, message_content):
         pcpp_urls = PCPPUtility.extract_unique_pcpp_urls(message_content)
         invalid_link = INVALID_URL_PATTERN.search(message_content)
@@ -1109,4 +1092,4 @@ async def setup(bot: commands.Bot) -> None:
     bot.add_dynamic_items(PCPPButton, PCPPMenu)
     cog_instance = PCPPCog(bot)
     await bot.add_cog(cog_instance)
-    await cog_instance.find_row_count()
+    await PCPPCog.find_row_count()

@@ -160,10 +160,3 @@ async def setup(bot):
         )  # Gets a set of custom blocked keywords
         print(AutoMod.keyword_block_list)
     await bot.add_cog(cls(bot))
-
-
-"""
-@bot.hybrid_command(description="Enable or disable file automod?")
-async def filemod(ctx, option: Literal["Enable", "Disable"]):
-    if option =="Enable":
-"""

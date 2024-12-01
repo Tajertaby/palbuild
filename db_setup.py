@@ -19,13 +19,15 @@ class Database:
         """
         for attempt in range(3, 0, -1):
             try:
-                await self.cursor.execute(self.sql, self.params)
+                result = await self.cursor.execute(self.sql, self.params)
+                print(result, 1)
                 if not self.sql.startswith("SELECT") and auto_commit:
                     await self.conn.commit()
                     SQL_LOG.info("Successfully executed and commited: %s", self.sql)
                     return self.cursor.rowcount # Returns no of rows affected
                 elif self.sql.startswith("SELECT"):
                     rows = await self.cursor.fetchall()
+                    print(rows, 1)
                     SQL_LOG.info("Successfully executed: %s", self.sql)
                     return rows
                 else: # This happens when auto commit is false
@@ -34,7 +36,7 @@ class Database:
             except aiosqlite.Error as e:
                 await self.conn.rollback()
                 SQL_LOG.exception(
-                    "SQL execution error: %s | Attempts left: %s", e, attempt - 1
+                    "SQL execution error: %s | Attempts left: %s. SQL: %s", e, attempt - 1, self.sql
                 )
                 if attempt == 1:
                     raise e # Re-raise the exception after the last attempt
@@ -93,8 +95,6 @@ class TableGroup:
                 pcpp_bot_msg_id INT,
                 invalid_msg_id INT,
                 channel_id INT,
-                pcpp_preview BOOLEAN,
-                invalid_link BOOLEAN,
                 PRIMARY KEY (user_msg_id)
             );
             """
