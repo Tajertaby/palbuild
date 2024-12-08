@@ -4,6 +4,7 @@ import textwrap
 import urllib.parse as parse
 from asyncio import TimeoutError as AsyncioTimeoutError
 from functools import lru_cache
+from typing import List, Tuple, Optional, Union
 
 import discord
 from async_lru import alru_cache
@@ -56,9 +57,9 @@ DOMAIN_PATTERN: re.Pattern[str] = re.compile(
 )
 
 BUTTON_TEMPLATE: str = (
-    "button:channel:(?P<channel_id>[0-9]+)message:(?P<message_id>[0-9]+)"
+    "button:channel:(?P<channel_id>[0-9]+)message:(?P<message_id>[0-9]+)timestamp:(?P<timestamp>[0-9]+)"
 )
-MENU_TEMPLATE: str = "menu:channel:(?P<channel_id>[0-9]+)message:(?P<message_id>[0-9]+)"
+MENU_TEMPLATE: str = "menu:channel:(?P<channel_id>[0-9]+)message:(?P<message_id>[0-9]+)timestamp:(?P<timestamp>[0-9]+)"
 
 
 class PCPPScraper:
@@ -514,12 +515,13 @@ class PCPPInteractionHandler:
         """
         channel_id = int(match["channel_id"])
         message_id = int(match["message_id"])
-        return channel_id, message_id
+        timestamp = int(match["timestamp"])
+        return channel_id, message_id, timestamp
 
     @staticmethod
     @alru_cache(maxsize=1024)
-    async def fetch_pcpp_urls_persist(
-        bot, channel_id: int, message_id: int
+    async def get_msg_object_for_url(
+        bot, channel_id: int, message_id: int, timestamp: int
     ) -> list[str]:
         """
         Retrieve PCPartPicker URLs from a specific Discord message.
@@ -534,6 +536,7 @@ class PCPPInteractionHandler:
         """
         channel = bot.get_channel(channel_id)
         message = await channel.fetch_message(message_id)
+        print(message.content, "message")
         return PCPPUtility.extract_unique_pcpp_urls(message.content)
 
     @staticmethod
@@ -555,15 +558,16 @@ class PCPPButton(discord.ui.DynamicItem[discord.ui.Button], template=BUTTON_TEMP
     A custom button for PCPartPicker list previews.
     """
 
-    def __init__(self, channel_id: int, message_id: int, url: str):
+    def __init__(self, channel_id: int, message_id: int, timestamp: int, url: str):
         self.channel_id = channel_id
         self.message_id = message_id
+        self.timestamp = timestamp
         self.url = url
         super().__init__(
             discord.ui.Button(
                 label="View Preview",
                 style=discord.ButtonStyle.blurple,
-                custom_id=f"button:channel:{self.channel_id}message:{self.message_id}",
+                custom_id=f"button:channel:{self.channel_id}message:{self.message_id}timestamp:{self.timestamp}",
             )
         )
 
@@ -586,12 +590,16 @@ class PCPPButton(discord.ui.DynamicItem[discord.ui.Button], template=BUTTON_TEMP
         Returns:
             PCPPButton: An instance of the PCPPButton.
         """
-        channel_id, message_id = PCPPInteractionHandler.parse_interaction_ids(match)
-        pcpp_urls = await PCPPInteractionHandler.fetch_pcpp_urls_persist(
-            interaction.client, channel_id, message_id
+        print("11")
+        channel_id, message_id, timestamp = (
+            PCPPInteractionHandler.parse_interaction_ids(match)
+        )
+        pcpp_urls = await PCPPInteractionHandler.get_msg_object_for_url(
+            interaction.client, channel_id, message_id, timestamp
         )
         url = pcpp_urls[0]
-        return cls(channel_id, message_id, url)
+        print(url)
+        return cls(channel_id, message_id, timestamp, url)
 
     async def callback(self, interaction: discord.Interaction) -> None:
         """
@@ -600,6 +608,7 @@ class PCPPButton(discord.ui.DynamicItem[discord.ui.Button], template=BUTTON_TEMP
         Args:
             interaction (discord.Interaction): The Discord interaction object.
         """
+        print("111")
         await PCPPInteractionHandler.send_preview(interaction, self.url)
 
 
@@ -609,15 +618,20 @@ class PCPPMenu(discord.ui.DynamicItem[discord.ui.Select], template=MENU_TEMPLATE
     """
 
     def __init__(
-        self, channel_id: int, message_id: int, options: list[discord.SelectOption]
+        self,
+        channel_id: int,
+        message_id: int,
+        timestamp: int,
+        options: list[discord.SelectOption],
     ) -> None:
         self.channel_id = channel_id
         self.message_id = message_id
+        self.timestamp = timestamp
         self.options = options
         super().__init__(
             discord.ui.Select(
                 placeholder="View Previews",
-                custom_id=f"menu:channel:{self.channel_id}message:{self.message_id}",
+                custom_id=f"menu:channel:{self.channel_id}message:{self.message_id}timestamp:{self.timestamp}",
                 options=self.options,
             )
         )
@@ -657,12 +671,14 @@ class PCPPMenu(discord.ui.DynamicItem[discord.ui.Select], template=MENU_TEMPLATE
         Returns:
             PCPPMenu: An instance of the PCPPMenu.
         """
-        channel_id, message_id = PCPPInteractionHandler.parse_interaction_ids(match)
-        pcpp_urls = await PCPPInteractionHandler.fetch_pcpp_urls_persist(
-            interaction.client, channel_id, message_id
+        channel_id, message_id, timestamp = (
+            PCPPInteractionHandler.parse_interaction_ids(match)
+        )
+        pcpp_urls = await PCPPInteractionHandler.get_msg_object_for_url(
+            interaction.client, channel_id, message_id, timestamp
         )
         options = cls.generate_options(pcpp_urls)
-        return cls(channel_id, message_id, options)
+        return cls(channel_id, message_id, timestamp, options)
 
     async def callback(self, interaction: discord.Interaction) -> None:
         """
@@ -678,7 +694,7 @@ class PCPPMenu(discord.ui.DynamicItem[discord.ui.Select], template=MENU_TEMPLATE
 class HandleLinks:
     @staticmethod
     def handle_valid_links(
-        channel_id, message_id, pcpp_urls: list[str]
+        channel_id: int, message_id: int, timestamp: int, pcpp_urls: list[str]
     ) -> discord.Embed:
         """
         Handle valid PCPartPicker links by creating appropriate UI components.
@@ -687,15 +703,18 @@ class HandleLinks:
             message (discord.Message): The Discord message object.
             pcpp_urls (list[str]): A list of valid PCPartPicker URLs.
         """
+        timestamp = str(timestamp.timestamp()).replace(".", "")
         preview_embed = PCPPMessage.create_preview_embed(pcpp_urls)
         view = discord.ui.View(timeout=None)
 
         if len(pcpp_urls) == 1:
-            button = PCPPButton(channel_id, message_id, pcpp_urls[0])
+            print(timestamp)
+            button = PCPPButton(channel_id, message_id, timestamp, pcpp_urls[0])
             view.add_item(button)
+
         else:
             options = PCPPMenu.generate_options(pcpp_urls)
-            menu = PCPPMenu(channel_id, message_id, options)
+            menu = PCPPMenu(channel_id, message_id, timestamp, options)
             view.add_item(menu)
 
         return preview_embed, view
@@ -722,24 +741,54 @@ class HandleLinks:
 
 
 class PCPPMessage:
+    """
+    Handles message-related operations for PCPartPicker link previews.
+    
+    This class provides static methods to manage bot messages associated with 
+    user messages containing PCPartPicker links.
+    """
+
     @staticmethod
     @alru_cache(maxsize=1024)
     async def extract_bot_msg_using_user_id(
-        bot, bot_msg_ids, channel_id
-    ) -> discord.Message:
+        bot: commands.Bot, 
+        bot_message_ids: Tuple[int, ...], 
+        channel_id: int
+    ) -> Tuple[discord.Message, ...]:
+        """
+        Fetch bot messages from a specific channel using their message IDs.
+        
+        Args:
+            bot: The Discord bot instance
+            bot_message_ids: Tuple of message IDs to fetch
+            channel_id: ID of the channel containing the messages
+        
+        Returns:
+            Tuple of fetched Discord messages
+        """
         channel = bot.get_channel(channel_id)
-        return tuple(
-            [await channel.fetch_message(message_id) for message_id in bot_msg_ids]
-        )
+        bot_messages = [
+            await channel.fetch_message(message_id) for message_id in bot_message_ids
+        ]
+        return tuple(bot_messages)
 
     @staticmethod
     async def insert_bot_msg_ids(
-        pcpp_message_id,
-        invalid_bot_message_id,
-        user_message_id,
-        channel_id,
-    ):
-
+        pcpp_message_id: int,
+        invalid_bot_message_id: int,
+        user_message_id: int,
+        channel_id: int,
+    ) -> None:
+        """
+        Insert bot message IDs into the database, managing table size.
+        
+        Args:
+            pcpp_message_id: ID of the PCPP preview bot message
+            invalid_bot_message_id: ID of the invalid link bot message
+            user_message_id: ID of the original user message
+            channel_id: ID of the channel where messages were sent
+        """
+        # Ensure table doesn't exceed maximum row count
         if (
             PCPPCog.pcpp_user_message_count >= PCPPCog.MAX_USER_MESSAGE_ID_COUNT
         ):  # Table cannot exceed 1000 rows
@@ -750,11 +799,12 @@ class PCPPMessage:
                     WHERE user_msg_id = (SELECT user_msg_id FROM pcpp_message_ids LIMIT 1);
                     """
                 ).run_query()
-            except (OperationalError, DatabaseError) as e:
-                SQL_LOG.exception("Cannot delete the row: %s", e)
+            except (OperationalError, DatabaseError) as db_error:
+                SQL_LOG.exception("Cannot delete the row: %s", db_error)
             else:
                 PCPPCog.pcpp_user_message_count -= 1
 
+        # Insert new message IDs if table has space
         if PCPPCog.pcpp_user_message_count <= PCPPCog.MAX_USER_MESSAGE_ID_COUNT - 1:
             try:
                 await Database(
@@ -769,77 +819,139 @@ class PCPPMessage:
                         channel_id,
                     ),  # First ID - User, Second ID - Bot
                 ).run_query(auto_commit=False)
-            except (OperationalError, DatabaseError) as e:
+            except (OperationalError, DatabaseError) as db_error:
                 SQL_LOG.exception(
-                    "Failed to insert the following data, rolling back.\nUser Message ID: %s\n PCPP Preview Message ID: %s\n Invalid Message ID: %s\n Channel ID: %s\n Error: %s",
+                    "Failed to insert the following data, rolling back.\n"
+                    "User Message ID: %s\n"
+                    "PCPP Preview Message ID: %s\n"
+                    "Invalid Message ID: %s\n"
+                    "Channel ID: %s\n"
+                    "Error: %s",
                     user_message_id,
                     pcpp_message_id,
                     invalid_bot_message_id,
                     channel_id,
-                    e,
+                    db_error,
                 )
             else:
                 PCPPCog.pcpp_user_message_count += 1
                 await Database.conn.commit()
 
     @staticmethod
-    async def find_bot_msg_ids(user_msg_id: int):
+    async def find_bot_msg_ids(user_msg_id: int) -> Tuple[Tuple[int, int], int]:
+        """
+        Retrieve bot message IDs and channel ID associated with a user message.
+        
+        Args:
+            user_msg_id: ID of the user message to look up
+        
+        Returns:
+            Tuple containing (pcpp_bot_msg_id, invalid_msg_id) and channel_id
+        
+        Raises:
+            Error: If database lookup fails
+        """
         try:
-            select_data = await Database(
+            # Fetch bot message IDs and channel ID from database
+            database_result = await Database(
                 """
                 SELECT pcpp_bot_msg_id, invalid_msg_id, channel_id FROM pcpp_message_ids
                 WHERE user_msg_id = ?;
                 """,
                 (user_msg_id,),
             ).run_query()
-            pcpp_bot_msg_id, invalid_msg_id, channel_id = select_data[0]
-        except (OperationalError, DatabaseError) as e:
+            pcpp_bot_msg_id, invalid_msg_id, channel_id = database_result[0]
+        except (OperationalError, DatabaseError) as db_error:
             SQL_LOG.exception(
                 "Failed to search the corresponding bot message id, channel_id and booleans from the user message: %s\n Error: %s",
                 user_msg_id,
-                e,
+                db_error,
             )
-            raise Error from e
-        return [pcpp_bot_msg_id, invalid_msg_id], channel_id
+            raise Error from db_error
+        return (pcpp_bot_msg_id, invalid_msg_id), channel_id
 
     @staticmethod
-    async def edit_pcpp_preview(bot_message, message, pcpp_urls):
+    async def edit_pcpp_preview(
+        bot_message: discord.Message, 
+        channel_id: int, 
+        user_msg_id: int, 
+        timestamp: Optional[datetime], 
+        pcpp_urls: List[str]
+    ) -> None:
+        """
+        Edit an existing PCPP preview message with new embed and view.
+        
+        Args:
+            bot_message: The bot message to edit
+            channel_id: ID of the channel
+            user_msg_id: ID of the original user message
+            timestamp: Timestamp of the message edit
+            pcpp_urls: List of PCPartPicker URLs
+        """
         preview_embed, view = HandleLinks.handle_valid_links(
-            bot_message.id, message.id, pcpp_urls
+            channel_id, user_msg_id, timestamp, pcpp_urls
         )
-        await bot_message.edit(preview_embed, view)
+        await bot_message.edit(embed=preview_embed, view=view)
 
     @staticmethod
-    async def edit_invalid_link(bot_message):
+    async def edit_invalid_link(bot_message: discord.Message) -> None:
+        """
+        Edit a message to show an invalid link error.
+        
+        Args:
+            bot_message: The bot message to edit with invalid link error
+        """
         error_embed = HandleLinks.handle_invalid_links()
-        await bot_message.edit(error_embed)
+        await bot_message.edit(embed=error_embed)
 
     @staticmethod
     async def placeholder_message(
         bot_message: discord.Message,
-        no_pcpp_preview: bool = True,
-        no_invalid_links: bool = True,
+        no_pcpp_preview: bool = False,
+        no_invalid_links: bool = False,
         edit: bool = False,
-    ) -> discord.Message:
-
+    ) -> Optional[discord.Message]:
+        """
+        Create or edit a placeholder message for various scenarios.
+        
+        Args:
+            bot_message: The message to reply to or edit
+            no_pcpp_preview: Flag for no PCPP previews available
+            no_invalid_links: Flag for no invalid links detected
+            edit: Whether to edit existing message or create a new reply
+        
+        Returns:
+            Discord message if created, None otherwise
+        """
         if no_pcpp_preview:
-            embed = discord.Embed(
-                title=("No invalid PCPP links detected."), color=9806321
-            )
+            embed = discord.Embed(title="No PCPP previews available.", color=9806321)
         elif no_invalid_links:
-            embed = discord.Embed(title=("No PCPP previews available."), color=9806321)
+            embed = discord.Embed(
+                title="No invalid PCPP links detected.", color=9806321
+            )
         else:
-            DISCORD_LOG.error("Failed to get a placehold message.")
-            return
+            DISCORD_LOG.error("Failed to get a placeholder message.")
+            return None
 
         if not edit:
             return await bot_message.reply(embed=embed)
         else:
-            return await bot_message.edit(embed=embed)
+            return await bot_message.edit(embed=embed, view=None)
 
     @staticmethod
-    async def delete_message(user_msg_id, bot_messages) -> None:
+    async def delete_message(
+        user_msg_id: int, 
+        bot_messages: Tuple[discord.Message, ...]
+    ) -> None:
+        """
+        Delete database record and associated bot messages.
+        
+        Args:
+            user_msg_id: ID of the user message to delete
+            bot_messages: Tuple of bot messages to delete
+        """
         try:
+            # Remove database entry for the user message
             await Database(
                 """
                 DELETE FROM pcpp_message_ids
@@ -847,41 +959,58 @@ class PCPPMessage:
                 """,
                 (user_msg_id,),
             ).run_query()
+            
+            # Delete all associated bot messages
             for bot_message in bot_messages:
                 await bot_message.delete()
-        except (OperationalError, DatabaseError) as e:
+        except (OperationalError, DatabaseError) as db_error:
             SQL_LOG.exception(
                 "Cannot delete the row containing user id or delete the message: %s. Error: %s",
                 user_msg_id,
-                e,
+                db_error,
             )
         else:
             PCPPCog.pcpp_user_message_count -= 1
 
     @staticmethod
     async def edit_pcpp_message(
-        bot_messages: tuple[discord.Message, discord.Message],
-        user_msg_id: int,
-        pcpp_bools: tuple,
-        before_pcpp_bools: tuple,
-    ) -> discord.Message:
+        bot_messages: Tuple[discord.Message, discord.Message],
+        message: discord.Message,
+        pcpp_bools: Tuple[List[str], Union[str, bool]],
+        before_pcpp_bools: Tuple[List[str], Union[str, bool]],
+    ) -> Optional[discord.Message]:
         """
+        Edit PCPP preview messages based on changes in message content.
+        
         Args:
-            message (discord.Message): The Discord message object.
+            bot_messages: Tuple of bot messages (PCPP preview and invalid link)
+            message: Original Discord message
+            pcpp_bools: Tuple of (PCPP URLs, invalid link status) after edit
+            before_pcpp_bools: Tuple of (PCPP URLs, invalid link status) before edit
+        
         Returns:
-            bot_message_list discord.Message: Message object of the bot's reply.
+            Optional bot message if any edits were made
         """
-
         pcpp_urls, invalid_link = pcpp_bools
         pcpp_message, invalid_link_message = bot_messages
+        
+        # No URLs or invalid links, no action needed
         if not any((pcpp_urls, invalid_link)):
-            return
+            return None
+
         before_pcpp_urls, before_invalid_link = before_pcpp_bools
 
+        # Various conditions for editing messages
         if (all([pcpp_urls, not invalid_link]) and all(before_pcpp_bools)) or (
             all([pcpp_urls, not invalid_link, before_invalid_link])
         ):
-            await PCPPMessage.edit_pcpp_preview(pcpp_message, user_msg_id, pcpp_urls)
+            await PCPPMessage.edit_pcpp_preview(
+                pcpp_message,
+                message.channel.id,
+                message.id,
+                message.edited_at,
+                pcpp_urls,
+            )
             await PCPPMessage.placeholder_message(
                 invalid_link_message, no_invalid_links=True, edit=True
             )
@@ -896,10 +1025,22 @@ class PCPPMessage:
             or (all([pcpp_urls, not invalid_link, before_pcpp_urls]))
             or (all([pcpp_urls, invalid_link, before_invalid_link]))
         ):
-            await PCPPMessage.edit_pcpp_preview(pcpp_message, user_msg_id, pcpp_urls)
+            await PCPPMessage.edit_pcpp_preview(
+                pcpp_message,
+                message.channel.id,
+                message.id,
+                message.edited_at,
+                pcpp_urls,
+            )
 
         elif all([pcpp_urls, invalid_link, before_pcpp_urls]):
-            await PCPPMessage.edit_pcpp_preview(pcpp_message, user_msg_id, pcpp_urls)
+            await PCPPMessage.edit_pcpp_preview(
+                pcpp_message,
+                message.channel.id,
+                message.id,
+                message.edited_at,
+                pcpp_urls,
+            )
             await PCPPMessage.edit_invalid_link(invalid_link_message)
 
         elif all([not pcpp_urls, invalid_link, before_pcpp_urls]):
@@ -909,33 +1050,46 @@ class PCPPMessage:
             await PCPPMessage.edit_invalid_link(invalid_link_message)
 
         elif all([not pcpp_urls, invalid_link, before_invalid_link]):
-            return
+            return None
 
     @staticmethod
     async def prepare_new_message(
         message: discord.Message,
-        pcpp_bools: tuple,
+        pcpp_bools: Tuple[List[str], Union[str, bool]],
     ) -> None:
-        pcpp_message = None
-        invalid_bot_message = None
+        """
+        Prepare and send bot messages for a new user message with PCPP links.
+        
+        Args:
+            message: Original Discord message
+            pcpp_bools: Tuple of (PCPP URLs, invalid link status)
+        """
+        pcpp_message: Optional[discord.Message] = None
+        invalid_bot_message: Optional[discord.Message] = None
         pcpp_urls, invalid_link = pcpp_bools
+        
+        # No URLs or invalid links, no action needed
         if not any((pcpp_urls, invalid_link)):
             return
 
+        # Handle PCPP URLs preview
         if pcpp_urls:
             preview_embed, view = HandleLinks.handle_valid_links(
-                message.channel.id, message.id, pcpp_urls
+                message.channel.id, message.id, message.created_at, pcpp_urls
             )
-            pcpp_message: discord.Message = await message.reply(
+            pcpp_message = await message.reply(
                 embed=preview_embed, view=view
             )
+            print(pcpp_message.components)
         elif not pcpp_urls:
             pcpp_message = await PCPPMessage.placeholder_message(
                 message, no_pcpp_preview=True
             )
+        
+        # Handle invalid links
         if invalid_link:
             error_embed = HandleLinks.handle_invalid_links()
-            invalid_bot_message: discord.Message = await message.reply(
+            invalid_bot_message = await message.reply(
                 embed=error_embed
             )
         elif not invalid_link:
@@ -943,6 +1097,7 @@ class PCPPMessage:
                 message, no_invalid_links=True
             )
 
+        # Insert message IDs into database
         await PCPPMessage.insert_bot_msg_ids(
             pcpp_message.id,
             invalid_bot_message.id,
@@ -951,15 +1106,15 @@ class PCPPMessage:
         )
 
     @staticmethod
-    def create_preview_embed(urls: list[str]) -> discord.Embed:
+    def create_preview_embed(urls: List[str]) -> discord.Embed:
         """
         Create an embed for PCPartPicker list previews.
 
         Args:
-            urls (list[str]): A list of PCPartPicker URLs.
+            urls: A list of PCPartPicker URLs.
 
         Returns:
-            discord.Embed: An embed object with the preview information.
+            Discord embed object with preview information
         """
         url_list = "\n".join(urls)
         return discord.Embed(
@@ -967,12 +1122,13 @@ class PCPPMessage:
                 f"""
             These are the previews for the following links:
             {url_list}
-            To finanically support us without any additional cost to you, please use the affiliate links listed in <#1306012582892535849> (`🛠┃freq-part-recs`).
+            To financially support us without any additional cost to you, please use the affiliate links listed in <#1306012582892535849> (`🛠┃freq-part-recs`).
             If you found a better deal, please let `@Oquenbier` know.
             """
             ),
             color=9806321,
         )
+
 
 
 class PCPPCog(commands.Cog):
@@ -1029,22 +1185,22 @@ class PCPPCog(commands.Cog):
                 # This checks if the lists found in dict are all still in new message
                 return
             else:
-                bot_messages = PCPPMessage.extract_bot_msg_using_user_id(
+                bot_messages = await PCPPMessage.extract_bot_msg_using_user_id(
                     self.bot, bot_msg_ids, channel_id_to_fetch
                 )
                 await PCPPMessage.edit_pcpp_message(
                     bot_messages,
-                    after.id,
+                    after,
                     pcpp_bools=(pcpp_urls, invalid_link),
                     before_pcpp_bools=(before_pcpp_urls, before_invalid_link),
                 )
         elif any([before_pcpp_urls, before_invalid_link]) and not any(
             [pcpp_urls, invalid_link]
         ):
-            bot_messages = PCPPMessage.extract_bot_msg_using_user_id(
+            bot_messages = await PCPPMessage.extract_bot_msg_using_user_id(
                 self.bot, bot_msg_ids, channel_id_to_fetch
             )
-            PCPPMessage.delete_message(after.id, bot_messages)
+            await PCPPMessage.delete_message(after.id, bot_messages)
         else:
             return
 
@@ -1055,10 +1211,10 @@ class PCPPCog(commands.Cog):
             bot_msg_ids, channel_id_to_fetch = await PCPPMessage.find_bot_msg_ids(
                 message.id
             )
-            bot_messages = PCPPMessage.extract_bot_msg_using_user_id(
+            bot_messages = await PCPPMessage.extract_bot_msg_using_user_id(
                 self.bot, bot_msg_ids, channel_id_to_fetch
             )
-            PCPPMessage.delete_message(message.id, bot_messages)
+            await PCPPMessage.delete_message(message.id, bot_messages)
 
     @lru_cache(maxsize=1024)
     def pcpp_regex_search(self, message_content):

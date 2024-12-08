@@ -10,7 +10,7 @@ SQL_LOG = logging.getLogger("sql")
 
 class Database:
     def __init__(self, sql: str, params: tuple = None) -> None:
-        self.sql = dedent(sql)  # Used to easily check which type of SQL query
+        self.sql = dedent(sql).strip()  # Used to easily check which type of SQL query
         self.params = params
 
     async def run_query(self, auto_commit=True) -> Union[int, List[Tuple]]:
@@ -19,8 +19,8 @@ class Database:
         """
         for attempt in range(3, 0, -1):
             try:
-                result = await self.cursor.execute(self.sql, self.params)
-                print(result, 1)
+                await self.cursor.execute(self.sql, self.params)
+                print(self.sql, 2)
                 if not self.sql.startswith("SELECT") and auto_commit:
                     await self.conn.commit()
                     SQL_LOG.info("Successfully executed and commited: %s", self.sql)
