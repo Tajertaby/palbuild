@@ -25,15 +25,30 @@ COGS: Tuple[Tuple[str, str], ...] = tuple(
     if cog.endswith(".py")
 )
 
-@bot.command(hidden=True)
-async def reload (ctx, files = None): # Command to reload bot
-    if files is None: # If no file params were provided
-
-    else:
         
 
 class FileManager:
+    @bot.command(hidden=True)
+    async def reload_command (ctx, name="reload", files = None): # Command to reload bot
+        if files is None: # If no file params were provided
+            for cog_name, file_path in COGS:
+                await FileManager.load_cog(cog_name, file_path)
+        else:
+            files = files.split(", ")
+            if FileManager.check_file_exists(files):
 
+    @classmethod
+    def check_file_exists(files) -> bool:
+        for file in files:# Loop through all provided files
+            # Construct the full file path
+            file_path = os.path.join(COGS_PATH, file)
+    
+            # Check if the file exists
+            if os.path.isfile(file_path):
+                return True
+            else:
+                logging.error(f"The file '{file}' does not exist in the directory '{COGS_PATH}'.")
+                return False
 
 
     @classmethod
@@ -91,23 +106,6 @@ class FileManager:
                 "Cog %s was not loaded, no action needed: %s", cog, not_loaded
             )
 
-    @staticmethod
-    async def validate_cog(file_path: str) -> bool:
-        """Validates cog syntax without executing it."""
-        try:
-            with open(file_path, encoding="utf-8") as cog_open:
-                cog_code = cog_open.read()
-            compile(cog_code, file_path, mode="exec")
-            return True
-        except FileNotFoundError as f:
-            logging.exception("Cog file not found: %s", f)
-        except SyntaxError as syntax_error:
-            logging.exception("A syntax error occurred: %s", syntax_error)
-        except Exception as e:
-            logging.exception("An exception occurred: %s", e)
-        return False
-
-
 class DiscordBot(commands.Bot):
     def __init__(self):
         intents = discord.Intents.default()
@@ -128,7 +126,7 @@ class DiscordBot(commands.Bot):
             sys.exit(1)
         SessionManager.create_session()  # Start a session for network requests
         for cog_name, file_path in COGS:
-            self.loop.create_task(FileManager.load_cog(cog_name, file_path))
+            await FileManager.load_cog(cog_name, file_path)
 
 
     async def on_ready(self) -> None:
