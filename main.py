@@ -25,31 +25,22 @@ COGS: Tuple[Tuple[str, str], ...] = tuple(
     if cog.endswith(".py")
 )
 
-        
 
 class FileManager:
-    @bot.command(hidden=True)
-    async def reload_command (ctx, name="reload", files = None): # Command to reload bot
-        if files is None: # If no file params were provided
-            for cog_name, file_path in COGS:
-                await FileManager.load_cog(cog_name, file_path)
-        else:
-            files = files.split(", ")
-            if FileManager.check_file_exists(files):
-
     @classmethod
-    def check_file_exists(files) -> bool:
-        for file in files:# Loop through all provided files
-            # Construct the full file path
+    def check_file_exists(cls, files: list[str]) -> dict[str, bool]:
+        """Check if the specified files exist in the COGS_PATH directory."""
+        file_bools = {}
+        for file in files:
             file_path = os.path.join(COGS_PATH, file)
-    
-            # Check if the file exists
             if os.path.isfile(file_path):
-                return True
+                file_bools[file] = True
             else:
-                logging.error(f"The file '{file}' does not exist in the directory '{COGS_PATH}'.")
-                return False
-
+                logging.error(
+                    f"The file '{file}' does not exist in the directory '{COGS_PATH}'."
+                )
+                file_bools[file] = False
+        return file_bools
 
     @classmethod
     async def load_cog(cls, cog: str, file_path: str) -> None:
@@ -106,6 +97,7 @@ class FileManager:
                 "Cog %s was not loaded, no action needed: %s", cog, not_loaded
             )
 
+
 class DiscordBot(commands.Bot):
     def __init__(self):
         intents = discord.Intents.default()
@@ -117,7 +109,7 @@ class DiscordBot(commands.Bot):
         logging.debug("Starting setup hook")
         setup_check = (
             await Database.setup_db()
-        )  # Creates the neccessary databases if needed
+        )  # Creates the necessary databases if needed
         if not setup_check:  # Stops the bot from running if the database setup fails
             logging.critical(
                 "Database setup failed, terminating connection to Discord and shutting down the program."
@@ -127,7 +119,6 @@ class DiscordBot(commands.Bot):
         SessionManager.create_session()  # Start a session for network requests
         for cog_name, file_path in COGS:
             await FileManager.load_cog(cog_name, file_path)
-
 
     async def on_ready(self) -> None:
         """Logs when the bot is ready."""
@@ -143,6 +134,26 @@ class DiscordBot(commands.Bot):
 bot = DiscordBot()
 
 
+@bot.command(name="reload")
+async def reload(ctx, *cog_names: str):
+    """Reloads one or more specific cogs or all cogs if no cog names are provided."""
+    if cog_names:
+        # Reload specific cogs
+        for cog_name in cog_names:
+            cog_name = cog_name.strip(", ")  # Remove any extra whitespace
+            cog_path = os.path.join(COGS_PATH, f"{cog_name}.py")
+            if os.path.isfile(cog_path):
+                await FileManager.reload_cog(cog_name, cog_path)
+                await ctx.send(f"Reloaded cog: {cog_name}")
+            else:
+                await ctx.send(f"Cog '{cog_name}' not found.")
+    else:
+        # Reload all cogs
+        for cog_name, file_path in COGS:
+            await FileManager.reload_cog(cog_name, file_path)
+        await ctx.send("Reloaded all cogs.")
+
+
 @bot.event
 async def on_message(message: discord.Message) -> None:
     """Ensures commands will trigger."""
@@ -150,4 +161,4 @@ async def on_message(message: discord.Message) -> None:
 
 
 if __name__ == "__main__":
-    bot.run(f"{DISCORD_TOKEN}", root_logger=True)  # Run the bot
+    bot.run(DISCORD_TOKEN, root_logger=True)  # Run the bot
