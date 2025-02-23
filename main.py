@@ -154,6 +154,40 @@ async def reload(ctx, *cog_names: str):
         await ctx.send("Reloaded all cogs.")
 
 
+@bot.command(name="load")
+async def load(ctx, *cog_names: str):
+    """Loads one or more specific cogs"""
+    if cog_names:
+        # Reload specific cogs
+        for cog_name in cog_names:
+            cog_name = cog_name.strip(", ")  # Remove any extra whitespace
+            cog_path = os.path.join(COGS_PATH, f"{cog_name}.py")
+            if os.path.isfile(cog_path):
+                await FileManager.load_cog(cog_name, cog_path)
+                await ctx.send(f"Loaded cog: {cog_name}")
+            else:
+                await ctx.send(f"Cog '{cog_name}' not found.")
+    else:
+        await ctx.send("No cog files were provided.")
+
+
+@bot.command(name="unload")
+async def load(ctx, *cog_names: str):
+    """Unloads one or more specific cogs"""
+    if cog_names:
+        # Reload specific cogs
+        for cog_name in cog_names:
+            cog_name = cog_name.strip(", ")  # Remove any extra whitespace
+            cog_path = os.path.join(COGS_PATH, f"{cog_name}.py")
+            if os.path.isfile(cog_path):
+                await FileManager.unload_cog(cog_name, cog_path)
+                await ctx.send(f"Unloaded cog: {cog_name}")
+            else:
+                await ctx.send(f"Cog '{cog_name}' not found.")
+    else:
+        await ctx.send("No cog files were provided.")
+
+
 @bot.event
 async def on_message(message: discord.Message) -> None:
     """Ensures commands will trigger."""
