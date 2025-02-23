@@ -43,7 +43,7 @@ class FileManager:
         return file_bools
 
     @classmethod
-    async def load_cog(cls, cog: str, file_path: str) -> None:
+    async def load_cog(cls, cog: str) -> None:
         """Loads a cog after validating its syntax."""
         try:
             await bot.load_extension(f"cogs.{cog}")
@@ -54,7 +54,7 @@ class FileManager:
             logging.exception(
                 "Cog %s is already loaded, reloading cog: %s", cog, already_loaded
             )
-            await cls.reload_cog(cog, file_path)
+            await cls.reload_cog(cog)
         except discord.ext.commands.NoEntryPointError as no_entry_point:
             logging.exception("Cog %s has no setup function: %s", cog, no_entry_point)
         except discord.ext.commands.ExtensionFailed as failed_load:
@@ -65,7 +65,7 @@ class FileManager:
             )
 
     @classmethod
-    async def reload_cog(cls, cog: str, file_path: str) -> None:
+    async def reload_cog(cls, cog) -> None:
         """Reloads a cog after validating its syntax."""
         try:
             await bot.reload_extension(f"cogs.{cog}")
@@ -74,7 +74,7 @@ class FileManager:
             logging.exception("Did not find cog %s: %s", cog, not_found)
         except discord.ext.commands.errors.ExtensionNotLoaded as not_loaded:
             logging.exception("Did not load cog %s, loading cog: %s", cog, not_loaded)
-            await cls.load_cog(cog, file_path)
+            await cls.load_cog(cog)
         except discord.ext.commands.NoEntryPointError as no_entry_point:
             logging.exception("Cog %s has no setup function: %s", cog, no_entry_point)
         except discord.ext.commands.ExtensionFailed as failed_load:
@@ -117,8 +117,8 @@ class DiscordBot(commands.Bot):
             await self.close()
             sys.exit(1)
         SessionManager.create_session()  # Start a session for network requests
-        for cog_name, file_path in COGS:
-            await FileManager.load_cog(cog_name, file_path)
+        for cog_name in COGS:
+            await FileManager.load_cog(cog_name)
 
     async def on_ready(self) -> None:
         """Logs when the bot is ready."""
@@ -143,14 +143,14 @@ async def reload(ctx, *cog_names: str):
             cog_name = cog_name.strip(", ")  # Remove any extra whitespace
             cog_path = os.path.join(COGS_PATH, f"{cog_name}.py")
             if os.path.isfile(cog_path):
-                await FileManager.reload_cog(cog_name, cog_path)
+                await FileManager.reload_cog(cog_name)
                 await ctx.send(f"Reloaded cog: {cog_name}")
             else:
                 await ctx.send(f"Cog '{cog_name}' not found.")
     else:
         # Reload all cogs
-        for cog_name, file_path in COGS:
-            await FileManager.reload_cog(cog_name, file_path)
+        for cog_name in COGS:
+            await FileManager.reload_cog(cog_name)
         await ctx.send("Reloaded all cogs.")
 
 
@@ -163,7 +163,7 @@ async def load(ctx, *cog_names: str):
             cog_name = cog_name.strip(", ")  # Remove any extra whitespace
             cog_path = os.path.join(COGS_PATH, f"{cog_name}.py")
             if os.path.isfile(cog_path):
-                await FileManager.load_cog(cog_name, cog_path)
+                await FileManager.load_cog(cog_name)
                 await ctx.send(f"Loaded cog: {cog_name}")
             else:
                 await ctx.send(f"Cog '{cog_name}' not found.")
@@ -172,7 +172,7 @@ async def load(ctx, *cog_names: str):
 
 
 @bot.command(name="unload")
-async def load(ctx, *cog_names: str):
+async def unload(ctx, *cog_names: str):
     """Unloads one or more specific cogs"""
     if cog_names:
         # Reload specific cogs
@@ -180,7 +180,7 @@ async def load(ctx, *cog_names: str):
             cog_name = cog_name.strip(", ")  # Remove any extra whitespace
             cog_path = os.path.join(COGS_PATH, f"{cog_name}.py")
             if os.path.isfile(cog_path):
-                await FileManager.unload_cog(cog_name, cog_path)
+                await FileManager.unload_cog(cog_name)
                 await ctx.send(f"Unloaded cog: {cog_name}")
             else:
                 await ctx.send(f"Cog '{cog_name}' not found.")
