@@ -73,6 +73,7 @@ class PCPPScraper:
 
     def __init__(self) -> None:
         self.power_icon = "\U0001F50C"
+        self.earth_icon = "\U0001F30E"
         self.price_icon = "\U0001F4B8"
 
     async def fetch_html_content(
@@ -284,6 +285,23 @@ class PCPPScraper:
             wattage = wattage_element.text.split(":")[-1].strip()
             return f"{self.power_icon} **Total Estimated Power ->** {wattage}\n"
         return ""
+    
+    def find_country(self, country_elements: str) -> str:
+        """
+        Find the country of the list.
+
+        Args:
+            country_elements (list): List of country-related HTML elements.
+
+        Returns:
+        str: Country name.
+        """
+        selected_country = country_elements.find('option', selected=True)
+        return (
+            f"{self.earth_icon}"
+            f"**Country ->** {selected_country.text}\n"
+        )
+
 
     def format_total_price(self, product_message: str, price_elements: list) -> str:
         """
@@ -333,6 +351,7 @@ class PCPPScraper:
         wattage_element = soup.find(
             "a", class_="actionBox__actions--key-metric-breakdown"
         )
+        country_elements = soup.find('select', class_='select select--small language-selector pp-country-select')
 
         if not all(
             [component_elements, product_elements, price_elements, wattage_element]
@@ -352,13 +371,14 @@ class PCPPScraper:
             wattage_message = self.format_power_consumption(
                 product_message, wattage_element
             )
+            country = self.find_country(country_elements)
             price_message = self.format_total_price(product_message, price_elements)
         except Exception as e:
             PCPP_LOG.exception("HTML parsing error: %s", e)
             return f"HTML parsing error: {e}"
 
         pcpp_message = (
-            f"{product_message}{compatibility_message}{wattage_message}{price_message}"
+            f"{product_message}{compatibility_message}{wattage_message}{country}{price_message}"
         )
 
         if len(pcpp_message) > 4096:
@@ -415,7 +435,7 @@ class PCPPScraper:
         Raises:
             Exception: If unable to fetch the list content after max retries.
         """
-        tag_names = ["td", "a", "p"]
+        tag_names = ["td", "a", "p", "select"]
         classes = [
             "td__component",
             "td__name",
@@ -424,6 +444,7 @@ class PCPPScraper:
             "td__where",
             "td__where td--empty",
             "td__where td__where--purchased",
+            "select select--small language-selector pp-country-select",
             "actionBox__actions--key-metric-breakdown",
             "note__text note__text--problem",
             "note__text note__text--warning",
@@ -1110,8 +1131,6 @@ class PCPPMessage:
                 f"""
                 These are the previews for the following links:
                 {url_list}
-                To financially support us without any additional cost to you, please use the affiliate links listed in <#1306012582892535849> (`🛠┃freq-part-recs`).
-                If you found a better deal, please let `@Oquenbier` know.
                 """
             ),
             color=ILOVEPCS_BLUE,

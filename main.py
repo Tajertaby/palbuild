@@ -117,7 +117,7 @@ class DiscordBot(commands.Bot):
             await self.close()
             sys.exit(1)
         SessionManager.create_session()  # Start a session for network requests
-        for cog_name in COGS:
+        for cog_name, cog_path in COGS:  # cog_path is a placeholder variable
             await FileManager.load_cog(cog_name)
 
     async def on_ready(self) -> None:
@@ -144,14 +144,12 @@ async def reload(ctx, *cog_names: str):
             cog_path = os.path.join(COGS_PATH, f"{cog_name}.py")
             if os.path.isfile(cog_path):
                 await FileManager.reload_cog(cog_name)
-                await ctx.send(f"Reloaded cog: {cog_name}")
             else:
-                await ctx.send(f"Cog '{cog_name}' not found.")
+                logging.error(f"Cog file {cog_name} not found.")
     else:
         # Reload all cogs
         for cog_name in COGS:
             await FileManager.reload_cog(cog_name)
-        await ctx.send("Reloaded all cogs.")
 
 
 @bot.command(name="load")
@@ -164,11 +162,10 @@ async def load(ctx, *cog_names: str):
             cog_path = os.path.join(COGS_PATH, f"{cog_name}.py")
             if os.path.isfile(cog_path):
                 await FileManager.load_cog(cog_name)
-                await ctx.send(f"Loaded cog: {cog_name}")
             else:
-                await ctx.send(f"Cog '{cog_name}' not found.")
+                logging.error(f"Cog file {cog_name}.py not found.")
     else:
-        await ctx.send("No cog files were provided.")
+        logging.error("No cog files were provided.")
 
 
 @bot.command(name="unload")
@@ -181,11 +178,10 @@ async def unload(ctx, *cog_names: str):
             cog_path = os.path.join(COGS_PATH, f"{cog_name}.py")
             if os.path.isfile(cog_path):
                 await FileManager.unload_cog(cog_name)
-                await ctx.send(f"Unloaded cog: {cog_name}")
             else:
-                await ctx.send(f"Cog '{cog_name}' not found.")
+                logging.error(f"Cog file {cog_name}.py not found.")
     else:
-        await ctx.send("No cog files were provided.")
+        logging.error("No cog files were provided.")
 
 
 @bot.event
