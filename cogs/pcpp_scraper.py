@@ -20,6 +20,7 @@ from sessions import SessionManager
 server = SessionManager.server  # Logger
 PCPP_LOG = logging.getLogger("pcpp_scraper")
 DISCORD_LOG = logging.getLogger("discord")
+YEAR_IN_CLASS = 2025
 
 # Constants and regex patterns for identifying PCPartPicker URLs
 PCPP_VALID_URL_PATTERN: re.Pattern[str] = re.compile(
@@ -163,7 +164,6 @@ class PCPPScraper:
             str: Formatted string of product details.
         """
         details = []
-
         for component, product, price, merchant in zip(
             component_elements, product_elements, price_elements, merchant_elements
         ):
@@ -342,19 +342,19 @@ class PCPPScraper:
         if "pcpartpicker.com/b/" in url:
             url = await self.fetch_list_url(url, domain, max_retries)
 
-        soup = await self.fetch_list_content(url, max_retries)
+        soup= await self.strainer_list(url, max_retries)
 
-        component_elements = soup.find_all("td", class_="td__component")
-        product_elements = soup.find_all("td", class_="td__name")
-        price_elements = soup.find_all("td", class_="td__price")
+        component_elements = soup.find_all("td", class_=f"td__component td__component-{YEAR_IN_CLASS}")
+        product_elements = soup.find_all("td", class_=f"td__name td__name-{YEAR_IN_CLASS}")
+        price_elements = soup.find_all("td", class_=f"td__price td__price-{YEAR_IN_CLASS}")
         merchant_elements = soup.find_all("td", class_="td__where")
         wattage_element = soup.find(
             "a", class_="actionBox__actions--key-metric-breakdown"
         )
-        country_elements = soup.find('select', class_='select select--small language-selector pp-country-select')
-
+        country_elements = soup.find("select", class_="select select--small language-selector pp-country-select")
+        print(wattage_element)
         if not all(
-            [component_elements, product_elements, price_elements, wattage_element]
+            [component_elements, product_elements, price_elements, merchant_elements, wattage_element, country_elements]
         ):
             PCPP_LOG.error("Cannot parse the HTML due to missing elements.")
             return "HTML parsing error due to missing required HTML elements"
@@ -421,7 +421,7 @@ class PCPPScraper:
 
         raise Exception("Failed to fetch list URL after maximum retries")
 
-    async def fetch_list_content(self, url: str, max_retries: int) -> BeautifulSoup:
+    async def strainer_list(self, url: str, max_retries: int) -> BeautifulSoup:
         """
         Fetch the content of a PCPartPicker list.
 
@@ -436,11 +436,11 @@ class PCPPScraper:
             Exception: If unable to fetch the list content after max retries.
         """
         tag_names = ["td", "a", "p", "select"]
-        classes = [
-            "td__component",
-            "td__name",
-            "td__price",
-            "td__price td__price--none",
+        class_list = [
+            f"td__component td__component-{YEAR_IN_CLASS}",
+            f"td__name td__name-{YEAR_IN_CLASS}",
+            f"td__price td__price-{YEAR_IN_CLASS}",
+            f"td__price td__price-{YEAR_IN_CLASS} td__price--none",
             "td__where",
             "td__where td--empty",
             "td__where td__where--purchased",
@@ -453,7 +453,7 @@ class PCPPScraper:
 
         for attempt in range(max_retries, 0, -1):
             try:
-                return await self.fetch_html_content(url, tag_names, classes)
+                return await self.fetch_html_content(url, tag_names, class_list)
             except (AsyncioTimeoutError, ClientConnectionError) as e:
                 server.info("Retrying, %s attempts left: %s", attempt, e)
             except (ClientPayloadError, ClientResponseError) as e:
