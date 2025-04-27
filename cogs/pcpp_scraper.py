@@ -220,7 +220,8 @@ class PCPPScraper:
             str: Price and merchant (if avaliable).
         """
 
-        if "alt=" in str(merchant_contents):  # Retrieve merchant
+        if "alt=" in str(merchant_contents) and len(price_contents) >= 2:  # Retrieve merchant
+            print(price_contents, 123)
             price = f"{price_contents[-2].text.strip()}"
             merchant = next(
                 (
@@ -352,7 +353,6 @@ class PCPPScraper:
             "a", class_="actionBox__actions--key-metric-breakdown"
         )
         country_elements = soup.find("select", class_="select select--small language-selector pp-country-select")
-        print(wattage_element)
         if not all(
             [component_elements, product_elements, price_elements, merchant_elements, wattage_element, country_elements]
         ):
