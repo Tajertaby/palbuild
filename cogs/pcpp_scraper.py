@@ -171,7 +171,6 @@ class PCPPScraper:
             product_name, product_link = self.parse_product_name_and_link(
                 product, domain
             )
-
             purchase = self.purchase_info(price.contents, merchant.contents)
 
             details.append(
@@ -219,9 +218,8 @@ class PCPPScraper:
         Returns:
             str: Price and merchant (if avaliable).
         """
-
-        if "alt=" in str(merchant_contents) and len(price_contents) >= 2:  # Retrieve merchant
-            print(price_contents, 123)
+        print(price_contents, 123)
+        if "alt=" in str(merchant_contents):  # Retrieve merchant
             price = f"{price_contents[-2].text.strip()}"
             merchant = next(
                 (
@@ -347,7 +345,8 @@ class PCPPScraper:
 
         component_elements = soup.find_all("td", class_=f"td__component td__component-{YEAR_IN_CLASS}")
         product_elements = soup.find_all("td", class_=f"td__name td__name-{YEAR_IN_CLASS}")
-        price_elements = soup.find_all("td", class_=f"td__price td__price-{YEAR_IN_CLASS}")
+        price_elements = soup.select(f".td__price.td__price-{YEAR_IN_CLASS}.td__price--none, .td__price.td__price-{YEAR_IN_CLASS}")
+
         merchant_elements = soup.find_all("td", class_="td__where")
         wattage_element = soup.find(
             "a", class_="actionBox__actions--key-metric-breakdown"
@@ -625,7 +624,6 @@ class PCPPButton(discord.ui.DynamicItem[discord.ui.Button], template=BUTTON_TEMP
             interaction (discord.Interaction): The Discord interaction object.
         """
         await PCPPInteractionHandler.send_preview(interaction, self.url)
-
 
 class PCPPMenu(discord.ui.DynamicItem[discord.ui.Select], template=MENU_TEMPLATE):
     """
