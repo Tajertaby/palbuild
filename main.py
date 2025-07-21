@@ -14,9 +14,9 @@ from sessions import SessionManager
 
 # Load environment variables
 CURRENT_PATH = os.path.dirname(os.path.abspath(__file__))
-load_dotenv(f"{CURRENT_PATH}\\secrets.env")
-DISCORD_TOKEN: str = os.getenv("DISCORD_TOKEN")
-COGS_PATH: str = f"{CURRENT_PATH}\\cogs"
+load_dotenv(os.path.join(CURRENT_PATH, "secrets.env")) # Loads env file regardless of OS
+DISCORD_TOKEN: str = os.getenv("DISCORD_TOKEN") # Works for all OS
+COGS_PATH: str = os.path.join(CURRENT_PATH, "cogs") # Works for all OS
 
 # Retrieve a tuple of cog names and paths
 # Each tuple contains (cog_name, cog_path)
