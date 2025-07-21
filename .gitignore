@@ -4,4 +4,7 @@ alru_cache.py
 discord_backup_codes.txt
 .venv/pyvenv.cfg
 discord_db.db
+.venv
+__pycache__
+cogs/__pycache__
 .gitignore
