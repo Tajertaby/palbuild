@@ -154,6 +154,7 @@ async def reload(ctx, *cog_names: str):
 
 
 @bot.command(name="load")
+@commands.is_owner()
 async def load(ctx, *cog_names: str):
     """Loads one or more specific cogs"""
     if cog_names:
@@ -170,6 +171,7 @@ async def load(ctx, *cog_names: str):
 
 
 @bot.command(name="unload")
+@commands.is_owner()
 async def unload(ctx, *cog_names: str):
     """Unloads one or more specific cogs"""
     if cog_names:
@@ -183,6 +185,22 @@ async def unload(ctx, *cog_names: str):
                 logging.error(f"Cog file {cog_name}.py not found.")
     else:
         logging.error("No cog files were provided.")
+
+
+@bot.command(name="stop")
+@commands.is_owner()
+async def stop(ctx):
+    """Command to stop the bot"""
+    await ctx.send("Shutting down...")
+    await bot.close()
+
+
+@bot.command(name="restart")
+@commands.is_owner()
+async def restart(ctx):
+    """Command to restart the bot"""
+    await ctx.send("Restarting...")
+    os.execv(sys.executable, ["python"] + sys.argv)
 
 
 @bot.event
