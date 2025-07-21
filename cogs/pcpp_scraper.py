@@ -72,9 +72,9 @@ class PCPPScraper:
     """
 
     def __init__(self) -> None:
-        self.power_icon = "\U0001F50C"
-        self.earth_icon = "\U0001F30E"
-        self.price_icon = "\U0001F4B8"
+        self.power_icon = "\U0001f50c"
+        self.earth_icon = "\U0001f30e"
+        self.price_icon = "\U0001f4b8"
 
     async def fetch_html_content(
         self, url: str, tag_name: str, class_list: list
@@ -265,7 +265,7 @@ class PCPPScraper:
                 }.get(note_type, "")
                 notes.append(formatted_note)
 
-        return "\n**__COMPATIBILITY NOTES__**\n{}\n\n".format('\n'.join(notes))
+        return "\n**__COMPATIBILITY NOTES__**\n{}\n\n".format("\n".join(notes))
 
     def format_power_consumption(self, product_message: str, wattage_element) -> str:
         """
@@ -282,7 +282,7 @@ class PCPPScraper:
             wattage = wattage_element.text.split(":")[-1].strip()
             return f"{self.power_icon} **Total Estimated Power ->** {wattage}\n"
         return ""
-    
+
     def find_country(self, country_elements: str) -> str:
         """
         Find the country of the list.
@@ -293,12 +293,8 @@ class PCPPScraper:
         Returns:
         str: Country name.
         """
-        selected_country = country_elements.find('option', selected=True)
-        return (
-            f"{self.earth_icon}"
-            f"**Country ->** {selected_country.text}\n"
-        )
-
+        selected_country = country_elements.find("option", selected=True)
+        return f"{self.earth_icon}" f"**Country ->** {selected_country.text}\n"
 
     def format_total_price(self, product_message: str, price_elements: list) -> str:
         """
@@ -339,19 +335,34 @@ class PCPPScraper:
         if "pcpartpicker.com/b/" in url:
             url = await self.fetch_list_url(url, domain, max_retries)
 
-        soup= await self.strainer_list(url, max_retries)
+        soup = await self.strainer_list(url, max_retries)
 
-        component_elements = soup.find_all("td", class_=f"td__component td__component-{YEAR_IN_CLASS}")
-        product_elements = soup.find_all("td", class_=f"td__name td__name-{YEAR_IN_CLASS}")
-        price_elements = soup.select(f".td__price.td__price-{YEAR_IN_CLASS}.td__price--none, .td__price.td__price-{YEAR_IN_CLASS}")
+        component_elements = soup.find_all(
+            "td", class_=f"td__component td__component-{YEAR_IN_CLASS}"
+        )
+        product_elements = soup.find_all(
+            "td", class_=f"td__name td__name-{YEAR_IN_CLASS}"
+        )
+        price_elements = soup.select(
+            f".td__price.td__price-{YEAR_IN_CLASS}.td__price--none, .td__price.td__price-{YEAR_IN_CLASS}"
+        )
 
         merchant_elements = soup.find_all("td", class_="td__where")
         wattage_element = soup.find(
             "a", class_="actionBox__actions--key-metric-breakdown"
         )
-        country_elements = soup.find("select", class_="select select--small language-selector pp-country-select")
+        country_elements = soup.find(
+            "select", class_="select select--small language-selector pp-country-select"
+        )
         if not all(
-            [component_elements, product_elements, price_elements, merchant_elements, wattage_element, country_elements]
+            [
+                component_elements,
+                product_elements,
+                price_elements,
+                merchant_elements,
+                wattage_element,
+                country_elements,
+            ]
         ):
 
             PCPP_LOG.error("Cannot parse the HTML due to missing elements.")
@@ -375,9 +386,7 @@ class PCPPScraper:
             PCPP_LOG.exception("HTML parsing error: %s", e)
             return f"HTML parsing error: {e}"
 
-        pcpp_message = (
-            f"{product_message}{compatibility_message}{wattage_message}{country}{price_message}"
-        )
+        pcpp_message = f"{product_message}{compatibility_message}{wattage_message}{country}{price_message}"
 
         if len(pcpp_message) > 4096:
             return (
@@ -623,6 +632,7 @@ class PCPPButton(discord.ui.DynamicItem[discord.ui.Button], template=BUTTON_TEMP
             interaction (discord.Interaction): The Discord interaction object.
         """
         await PCPPInteractionHandler.send_preview(interaction, self.url)
+
 
 class PCPPMenu(discord.ui.DynamicItem[discord.ui.Select], template=MENU_TEMPLATE):
     """
@@ -1127,10 +1137,7 @@ class PCPPMessage:
         url_list = "\n".join(urls)
         return discord.Embed(
             description=textwrap.dedent(
-                f"""
-                These are the previews for the following links:
-                {url_list}
-                """
+                f"These are the previews for the following links:{url_list}"
             ),
             color=ILOVEPCS_BLUE,
         )
