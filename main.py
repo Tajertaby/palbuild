@@ -145,16 +145,21 @@ async def reload(ctx, *cog_names: str):
     """Reloads one or more specific cogs or all cogs if no cog names are provided."""
     if cog_names:
         # Reload specific cogs
+        successful_cogs = []
         for cog_name in cog_names:
             cog_name = cog_name.strip(", ")  # Remove any extra whitespace
             cog_path = os.path.join(COGS_PATH, f"{cog_name}.py")
             if os.path.isfile(cog_path):
                 await FileManager.reload_cog(cog_name)
+                successful_cogs.append(cog_name)
             else:
-                logging.error("Cog file %s not found.", cog_name)
+                logging.error(f"Cog file {cog_name} not found.")
+        await ctx.send(f"Cog(s) {successful_cogs} were reloaded.")
+        logging.info("Cog(s) %s were reloaded.", {successful_cogs})
     else:
         # Reload all cogs
         for cog_name in COGS:
+            await ctx.send("No cog files were provided.")
             await FileManager.reload_cog(cog_name)
 
 
@@ -164,14 +169,19 @@ async def load(ctx, *cog_names: str):
     """Loads one or more specific cogs"""
     if cog_names:
         # Reload specific cogs
+        successful_cogs = []
         for cog_name in cog_names:
             cog_name = cog_name.strip(", ")  # Remove any extra whitespace
             cog_path = os.path.join(COGS_PATH, f"{cog_name}.py")
             if os.path.isfile(cog_path):
                 await FileManager.load_cog(cog_name)
+                successful_cogs.append(cog_name)
             else:
-                logging.error("Cog file %s.py not found.", cog_name)
+                logging.error(f"Cog file {cog_name}.py not found.")
+        await ctx.send(f"Cog(s) {successful_cogs} were loaded.")
+        logging.info("Cog(s) %s were loaded.", {successful_cogs})
     else:
+        await ctx.send("No cog files were provided.")
         logging.error("No cog files were provided.")
 
 
@@ -181,14 +191,19 @@ async def unload(ctx, *cog_names: str):
     """Unloads one or more specific cogs"""
     if cog_names:
         # Reload specific cogs
+        successful_cogs = []
         for cog_name in cog_names:
             cog_name = cog_name.strip(", ")  # Remove any extra whitespace
             cog_path = os.path.join(COGS_PATH, f"{cog_name}.py")
             if os.path.isfile(cog_path):
                 await FileManager.unload_cog(cog_name)
+                successful_cogs.append(cog_name)
             else:
-                logging.error("Cog file %s.py not found.", cog_name)
+                logging.error(f"Cog file {cog_name}.py not found.")
+        await ctx.send(f"Cog(s) {successful_cogs} were unloaded.")
+        logging.info("Cog(s) %s were unloaded.", {successful_cogs})
     else:
+        await ctx.send("No cog files were provided.")
         logging.error("No cog files were provided.")
 
 
@@ -201,31 +216,14 @@ async def stop(ctx):
 
 
 @bot.command(name="restart")
-@commands.is_owner()
 async def restart(ctx):
-    """Command to restart the bot"""
-    await ctx.send("Restarting...")
-    os.execv(sys.executable, ["python"] + sys.argv)
-
-
-@bot.command(name="sync")
-@commands.is_owner()
-async def sync(ctx: commands.Context) -> None:
-    """
-    Sync slash commands globally (may take up to 1 hour to update)
-    Owner-only command.
-
-    Usage:
-    !sync
-    """
+    await ctx.send("Restarting bot")
+    # Re-run the current python executable with the same arguments
     try:
-        synced = await ctx.bot.tree.sync()
-        await ctx.send(
-            f"Successfully synced {len(synced)} commands globally. Changes may take up to 1 hour to appear."
-        )
+        os.execv(sys.executable, ["python"] + sys.argv)
     except Exception as e:
-        await ctx.send(f"Failed to sync commands: {e}")
-        logging.exception("An exception occurred whilst syncing commands %s", e)
+        await ctx.send("Failed to restart bot")
+        logging.error("Failed to restart bot. Exception thrown: %s", e)
 
 
 @bot.event
