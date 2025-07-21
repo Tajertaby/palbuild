@@ -7,4 +7,5 @@ discord_db.db
 .venv
 __pycache__
 cogs/__pycache__
+test_bot.py
 .gitignore

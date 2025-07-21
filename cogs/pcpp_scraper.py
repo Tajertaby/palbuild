@@ -13,7 +13,6 @@ from aiohttp import ClientConnectionError, ClientPayloadError, ClientResponseErr
 from aiosqlite import Error, DatabaseError, OperationalError
 from bs4 import BeautifulSoup, SoupStrainer
 from discord.ext import commands
-
 from db_setup import SQL_LOG, Database
 from sessions import SessionManager
 
@@ -218,7 +217,6 @@ class PCPPScraper:
         Returns:
             str: Price and merchant (if avaliable).
         """
-        print(price_contents, 123)
         if "alt=" in str(merchant_contents):  # Retrieve merchant
             price = f"{price_contents[-2].text.strip()}"
             merchant = next(
@@ -355,6 +353,7 @@ class PCPPScraper:
         if not all(
             [component_elements, product_elements, price_elements, merchant_elements, wattage_element, country_elements]
         ):
+
             PCPP_LOG.error("Cannot parse the HTML due to missing elements.")
             return "HTML parsing error due to missing required HTML elements"
 

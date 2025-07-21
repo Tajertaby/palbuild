@@ -141,7 +141,6 @@ class AutoMod(commands.Cog):
             AutoMod.keyword_block_list = set(
                 rule.trigger.keyword_filter
             )  # Updates set of custom blocked keywords
-            print(AutoMod.keyword_block_list)
         else:
             return
 
@@ -158,5 +157,4 @@ async def setup(bot):
         cls.keyword_block_list = set(
             rule.trigger.keyword_filter
         )  # Gets a set of custom blocked keywords
-        print(AutoMod.keyword_block_list)
     await bot.add_cog(cls(bot))
