@@ -8,4 +8,3 @@ discord_db.db
 __pycache__
 cogs/__pycache__
 test_bot.py
-.gitignore
