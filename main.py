@@ -13,9 +13,10 @@ from db_setup import Database
 from sessions import SessionManager
 
 # Load environment variables
-load_dotenv(r"E:\Discord Bot Files\secrets.env")
+CURRENT_PATH = os.path.dirname(os.path.abspath(__file__))
+load_dotenv(f"{CURRENT_PATH}\\secrets.env")
 DISCORD_TOKEN: str = os.getenv("DISCORD_TOKEN")
-COGS_PATH: str = r"E:\Discord Bot Files\cogs"
+COGS_PATH: str = f"{CURRENT_PATH}\\cogs"
 
 # Retrieve a tuple of cog names and paths
 # Each tuple contains (cog_name, cog_path)
