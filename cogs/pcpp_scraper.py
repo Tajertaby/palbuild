@@ -1082,6 +1082,8 @@ class PCPPMessage:
         # No URLs or invalid links, no action needed
         if not any((pcpp_urls, invalid_link)):
             return
+        else:
+            await message.edit(suppress=True)
 
         # Handle PCPP URLs preview
         if pcpp_urls:
