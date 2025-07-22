@@ -24,9 +24,9 @@ Use screen to ensure persistence, even when you're not connected to a VPS. Here 
 
 - Replace `COG_NAME` with the name of your cog file, **DO NOT** include the `.py` file extention. You can load/unload/reload as many cogs as you want.
 
-`!stop` Shut down the bot
+`!stop` Shut down the bot.
 
-`!restart` Restart the bot
+`!restart` Restart the bot.
 
 **Contact**
 
