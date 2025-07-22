@@ -24,4 +24,5 @@ On MacOS/Linux, use terminal and run `python3 PATH_TO_FILE`
 - Replace `COG_NAME` with the name of your cog file, **DO NOT** include the `.py` file extention. You can load/unload/reload as many cogs as you want.
 
 `!stop` Shut down the bot
+
 `!restart` Restart the bot
