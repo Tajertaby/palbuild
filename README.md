@@ -11,6 +11,7 @@
 On Windows, use PowerShell and run `python PATH_TO_FILE`
 On MacOS/Linux, use terminal and run `python3 PATH_TO_FILE`
 - VPS Hosting?
+Use screen to ensure persistence, even when you're not connected to a VPS. Here is a link to a [screen tutorial](https://contabo.com/blog/what-is-screen-and-how-to-use-it-on-a-vps/).
 
 **Bot owner specific Discord commands:**
 
