@@ -15,8 +15,11 @@ On MacOS/Linux, use terminal and run `python3 PATH_TO_FILE`
 **Bot owner specific Discord commands:**
 
 `!load COG_NAME1 COG_NAME2 COG_NAME3` Load cog(s).
+
 `!unload COG_NAME1 COG_NAME2 COG_NAME3` Unload cog(s).
+
 `!reload COG_NAME1 COG_NAME2 COG_NAME3` Reload cog(s).
+
 
 - Replace `COG_NAME` with the name of your cog file, **DO NOT** include the `.py` file extention. You can load/unload/reload as many cogs as you want.
 
