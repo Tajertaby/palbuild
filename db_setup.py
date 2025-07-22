@@ -6,6 +6,8 @@ from typing import Union, List, Tuple
 import aiosqlite
 
 SQL_LOG = logging.getLogger("sql")
+CURRENT_PATH = os.path.dirname(os.path.abspath(__file__))
+DISCORD_DB_PATH: str = os.path.join(CURRENT_PATH, "discord_db.db")
 
 
 class Database:
@@ -59,7 +61,7 @@ class Database:
         """
         SQL_LOG.info("Setting up the database")
         try:
-            cls.conn: aiosqlite.Connection = await aiosqlite.connect("discord_db.db")
+            cls.conn: aiosqlite.Connection = await aiosqlite.connect(DISCORD_DB_PATH)
             cls.cursor: aiosqlite.Connection.cursor = await cls.conn.cursor()
             await TableGroup.pcpp_tables()  # Create tables
         except (aiosqlite.OperationalError, aiosqlite.DatabaseError) as e:
