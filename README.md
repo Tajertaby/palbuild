@@ -29,4 +29,5 @@ Use screen to ensure persistence, even when you're not connected to a VPS. Here 
 `!restart` Restart the bot
 
 **Contact**
+
 Join this [Discord server](https://discord.gg/UEbE5PZUSq) for bot related issues.
