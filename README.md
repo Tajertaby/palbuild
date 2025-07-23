@@ -5,8 +5,8 @@
 3. Copy the path to `palbuild-main`. Then run `cd COPIED PATH`
 4. Run `pip install -r requirements.txt`
 5. Follow this [site](https://www.writebots.com/discord-bot-token/) on instructions on how to create a new Discord bot.
-6. In `secrets.env`, replace `YOUR_TOKEN_HERE` with your actual bot token.
-7. Run the `main.py` file in order to start the bot.
+7. In `example.secrets.env`, replace `YOUR_TOKEN_HERE` with your actual bot token and rename the file to `secrets.env`.
+8. Run the `main.py` file in order to start the bot.
 - Host Locally?
 On Windows, use PowerShell and run `python PATH_TO_FILE`
 On MacOS/Linux, use terminal and run `python3 PATH_TO_FILE`
