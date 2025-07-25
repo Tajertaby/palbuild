@@ -1137,7 +1137,7 @@ class PCPPMessage:
         url_list = "\n".join(urls)
         return discord.Embed(
             description=textwrap.dedent(
-                f"These are the previews for the following links:{url_list}"
+                f"These are the previews for the following links:\n{url_list}"
             ),
             color=ILOVEPCS_BLUE,
         )
