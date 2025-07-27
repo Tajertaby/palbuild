@@ -1,6 +1,5 @@
 import re
 import urllib.parse as parse
-from typing import List
 
 import discord
 from async_lru import alru_cache
@@ -76,6 +75,6 @@ class PCPPUtility:
         """
         Generate a preview embed for a PCPartPicker list URL.
         """
-        scraper = PCPPScraper()  # <-- Now properly available
+        scraper = PCPPScraper()
         pcpp_message = await scraper.process_pcpartpicker_list(url)
         return discord.Embed(description=pcpp_message, color=ILOVEPCS_BLUE)

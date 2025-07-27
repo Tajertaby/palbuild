@@ -10,18 +10,15 @@ sys.path.append(str(Path(__file__).parent.parent))
 from discord.ext import commands
 from aiosqlite import OperationalError, DatabaseError
 from db_setup import Database
-from pcpp_message_handler import PCPPMessage, HandleLinks
-from pcpp_utility import PCPPUtility, INVALID_URL_PATTERN, ILOVEPCS_BLUE
-from pcpp_ui_components import PCPPButton, PCPPMenu
-
+from pcpp_helper_files.pcpp_message_handler import PCPPMessage, HandleLinks
+from pcpp_helper_files.pcpp_utility import PCPPUtility, INVALID_URL_PATTERN, ILOVEPCS_BLUE
+from pcpp_helper_files.pcpp_ui_components import PCPPButton, PCPPMenu
+from pcpp_helper_files.pcpp_sql import PCPPSQL
 
 class PCPPCog(commands.Cog):
     """
     Cog for handling PCPartPicker list previews in Discord.
     """
-
-    MAX_USER_MESSAGE_ID_COUNT: int = 1024
-    pcpp_user_message_count: int
 
     def __init__(self, bot: commands.Bot):
         """
@@ -72,7 +69,7 @@ class PCPPCog(commands.Cog):
 
         bot_msg_ids: List[int]
         channel_id_to_fetch: Optional[int]
-        bot_msg_ids, channel_id_to_fetch = await PCPPMessage.find_bot_msg_ids(after.id)
+        bot_msg_ids, channel_id_to_fetch = await PCPPSQL.find_bot_msg_ids(after.id)
 
         if not all([all(bot_msg_ids), channel_id_to_fetch]):
             return  # Cannot edit message without a valid bot/channel id
@@ -85,7 +82,7 @@ class PCPPCog(commands.Cog):
                 # This checks if the lists found in dict are all still in new message
                 return
             else:
-                bot_messages = await PCPPMessage.extract_bot_msg_using_user_id(
+                bot_messages = await PCPPSQL.extract_bot_msg_using_user_id(
                     self.bot, bot_msg_ids, channel_id_to_fetch
                 )
                 await PCPPMessage.edit_pcpp_message(
@@ -97,10 +94,10 @@ class PCPPCog(commands.Cog):
         elif any([before_pcpp_urls, before_invalid_link]) and not any(
             [pcpp_urls, invalid_link]
         ):
-            bot_messages = await PCPPMessage.extract_bot_msg_using_user_id(
+            bot_messages = await PCPPSQL.extract_bot_msg_using_user_id(
                 self.bot, bot_msg_ids, channel_id_to_fetch
             )
-            await PCPPMessage.delete_message(after.id, bot_messages)
+            await PCPPSQL.delete_msg_ids(after.id, bot_messages)
         else:
             return
 
@@ -116,13 +113,13 @@ class PCPPCog(commands.Cog):
         if any([pcpp_urls, invalid_link]):
             bot_msg_ids: List[int]
             channel_id_to_fetch: Optional[int]
-            bot_msg_ids, channel_id_to_fetch = await PCPPMessage.find_bot_msg_ids(
+            bot_msg_ids, channel_id_to_fetch = await PCPPSQL.find_bot_msg_ids(
                 message.id
             )
-            bot_messages = await PCPPMessage.extract_bot_msg_using_user_id(
+            bot_messages = await PCPPSQL.extract_bot_msg_using_user_id(
                 self.bot, bot_msg_ids, channel_id_to_fetch
             )
-            await PCPPMessage.delete_message(message.id, bot_messages)
+            await PCPPSQL.delete_msg_ids(message.id, bot_messages)
 
     @lru_cache(maxsize=1024)
     def pcpp_regex_search(

@@ -17,7 +17,6 @@ from sessions import SessionManager
 
 server = SessionManager.server  # Logger
 PCPP_LOG = logging.getLogger("pcpp_scraper")
-DISCORD_LOG = logging.getLogger("discord")
 YEAR_IN_CLASS = 2025
 DOMAIN_PATTERN: re.Pattern[str] = re.compile(
     r"https?://(?:[a-z]{2}\.)?pcpartpicker\.com", re.IGNORECASE
