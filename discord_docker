@@ -1,0 +1,14 @@
+# Use an official Python runtime as the base image
+FROM python
+
+# Set the working directory inside the container
+WORKDIR /app
+
+# Copy the requirements file from your local machine to the container
+COPY requirements.txt .
+
+# Install the dependencies
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Run the bot
+CMD ["python", "main.py"]

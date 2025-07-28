@@ -40,6 +40,7 @@ class AutoMod(commands.Cog):
         1138822177999835176,  # ID: #pc-building
         1238376365917605941,  # ID: #hardware-troubleshoot
         1275248718618300416,  # ID: #software-troubleshoot
+        1397285902346358897,  # ID: #network-troubleshoot
         1138459224691703919,  # ID: #peripherals
         1138821244876238878,  # ID: #prebuilts-laptops
     }

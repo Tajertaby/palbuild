@@ -2,12 +2,11 @@ import asyncio
 import os
 import logging
 import sys
-from typing import Tuple, Set, Optional
+from typing import Tuple
 
 import discord
 from discord.ext import commands
 from dotenv import load_dotenv
-from watchfiles import awatch, Change
 
 from db_setup import Database
 from sessions import SessionManager
@@ -38,7 +37,7 @@ class FileManager:
                 file_bools[file] = True
             else:
                 logging.error(
-                    f"The file '{file}' does not exist in the directory '{COGS_PATH}'."
+                    "The file '%s' does not exist in the directory '%s'.", file, COGS_PATH
                 )
                 file_bools[file] = False
         return file_bools
@@ -148,9 +147,7 @@ async def reload(ctx, *cog_names: str):
                 await FileManager.reload_cog(cog_name)
                 successful_cogs.append(cog_name)
             else:
-                logging.error(f"Cog file {cog_name} not found.")
-        await ctx.send(f"Cog(s) {successful_cogs} were reloaded.")
-        logging.info("Cog(s) %s were reloaded.", {successful_cogs})
+                logging.error("Cog file %s not found.", cog_name)
     else:
         # Reload all cogs
         for cog_name in COGS:
@@ -172,9 +169,7 @@ async def load(ctx, *cog_names: str):
                 await FileManager.load_cog(cog_name)
                 successful_cogs.append(cog_name)
             else:
-                logging.error(f"Cog file {cog_name}.py not found.")
-        await ctx.send(f"Cog(s) {successful_cogs} were loaded.")
-        logging.info("Cog(s) %s were loaded.", {successful_cogs})
+                logging.error("Cog file %s.py not found.", cog_name)
     else:
         await ctx.send("No cog files were provided.")
         logging.error("No cog files were provided.")
@@ -194,9 +189,7 @@ async def unload(ctx, *cog_names: str):
                 await FileManager.unload_cog(cog_name)
                 successful_cogs.append(cog_name)
             else:
-                logging.error(f"Cog file {cog_name}.py not found.")
-        await ctx.send(f"Cog(s) {successful_cogs} were unloaded.")
-        logging.info("Cog(s) %s were unloaded.", {successful_cogs})
+                logging.error("Cog file %s.py not found.", cog_name)
     else:
         await ctx.send("No cog files were provided.")
         logging.error("No cog files were provided.")
