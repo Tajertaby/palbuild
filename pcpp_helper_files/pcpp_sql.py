@@ -10,6 +10,13 @@ class PCPPSQL:
     pcpp_user_message_count: int
 
     @classmethod
+    async def find_row_count(cls) -> None:
+        """
+        Asynchronously count the rows in the PCPP message IDs database table.
+        """
+        cls.pcpp_user_message_count = await Database.count_rows("pcpp_message_ids")
+
+    @classmethod
     async def insert_bot_msg_ids(
         cls,
         pcpp_message_id: int,

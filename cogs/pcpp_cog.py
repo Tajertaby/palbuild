@@ -31,13 +31,6 @@ class PCPPCog(commands.Cog):
         """
         self.bot: commands.Bot = bot
 
-    @classmethod
-    async def find_row_count(cls) -> None:
-        """
-        Asynchronously count the rows in the PCPP message IDs database table.
-        """
-        cls.pcpp_user_message_count = await Database.count_rows("pcpp_message_ids")
-
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message) -> None:
         """
@@ -87,7 +80,7 @@ class PCPPCog(commands.Cog):
                 # This checks if the lists found in dict are all still in new message
                 return
             else:
-                bot_messages = await PCPPSQL.extract_bot_msg_using_user_id(
+                bot_messages = await PCPPMessage.extract_bot_msg_using_user_id(
                     self.bot, bot_msg_ids, channel_id_to_fetch
                 )
                 await PCPPMessage.edit_pcpp_message(
@@ -99,7 +92,7 @@ class PCPPCog(commands.Cog):
         elif any([before_pcpp_urls, before_invalid_link]) and not any(
             [pcpp_urls, invalid_link]
         ):
-            bot_messages = await PCPPSQL.extract_bot_msg_using_user_id(
+            bot_messages = await PCPPMessage.extract_bot_msg_using_user_id(
                 self.bot, bot_msg_ids, channel_id_to_fetch
             )
             await PCPPSQL.delete_msg_ids(after.id, bot_messages)
@@ -121,10 +114,10 @@ class PCPPCog(commands.Cog):
             bot_msg_ids, channel_id_to_fetch = await PCPPSQL.find_bot_msg_ids(
                 message.id
             )
-            bot_messages = await PCPPSQL.extract_bot_msg_using_user_id(
+            bot_messages = await PCPPMessage.extract_bot_msg_using_user_id(
                 self.bot, bot_msg_ids, channel_id_to_fetch
             )
-            await PCPPMessage.delete_messages(message.id, bot_messages)
+            await PCPPMessage.delete_message(message.id, bot_messages)
 
     @lru_cache(maxsize=1024)
     def pcpp_regex_search(
@@ -147,4 +140,4 @@ async def setup(bot: commands.Bot) -> None:
     bot.add_dynamic_items(PCPPButton, PCPPMenu)
     cog_instance = PCPPCog(bot)
     await bot.add_cog(cog_instance)
-    await PCPPCog.find_row_count()
+    await PCPPSQL.find_row_count()

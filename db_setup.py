@@ -6,6 +6,8 @@ from typing import Union, List, Tuple
 import aiosqlite
 
 SQL_LOG = logging.getLogger("sql")
+CURRENT_PATH = os.path.dirname(os.path.abspath(__file__))
+DISCORD_DB_PATH: str = os.path.join(CURRENT_PATH, "discord_db.db")
 
 
 class Database:
@@ -24,30 +26,35 @@ class Database:
                 if not self.sql.startswith("SELECT") and auto_commit:
                     await self.conn.commit()
                     SQL_LOG.info("Successfully executed and commited: %s", self.sql)
-                    return self.cursor.rowcount # Returns no of rows affected
+                    return self.cursor.rowcount  # Returns no of rows affected
                 elif self.sql.startswith("SELECT"):
                     rows = await self.cursor.fetchall()
                     print(rows, 1)
                     SQL_LOG.info("Successfully executed: %s", self.sql)
                     return rows
-                else: # This happens when auto commit is false
+                else:  # This happens when auto commit is false
                     SQL_LOG.info("Successfully executed: %s", self.sql)
                     return self.cursor.rowcount
             except aiosqlite.Error as e:
                 await self.conn.rollback()
                 SQL_LOG.exception(
-                    "SQL execution error: %s | Attempts left: %s. SQL: %s", e, attempt - 1, self.sql
+                    "SQL execution error: %s | Attempts left: %s. SQL: %s",
+                    e,
+                    attempt - 1,
+                    self.sql,
                 )
                 if attempt == 1:
-                    raise e # Re-raise the exception after the last attempt
+                    raise e  # Re-raise the exception after the last attempt
             else:
-                break # Stops the loop if successful
+                break  # Stops the loop if successful
 
     @classmethod
     async def count_rows(cls, table_name) -> int:
         try:
-            count_rows = await cls(f"SELECT DISTINCT Count(*) FROM {table_name};").run_query()
-            return int(count_rows[0][0]) # Convert from list of tuples to int
+            count_rows = await cls(
+                f"SELECT DISTINCT Count(*) FROM {table_name};"
+            ).run_query()
+            return int(count_rows[0][0])  # Convert from list of tuples to int
         except (aiosqlite.OperationalError, aiosqlite.DatabaseError) as e:
             SQL_LOG.exception("Failed to count rows: %s", e)
 
@@ -59,7 +66,7 @@ class Database:
         """
         SQL_LOG.info("Setting up the database")
         try:
-            cls.conn: aiosqlite.Connection = await aiosqlite.connect("discord_db.db")
+            cls.conn: aiosqlite.Connection = await aiosqlite.connect(DISCORD_DB_PATH)
             cls.cursor: aiosqlite.Connection.cursor = await cls.conn.cursor()
             await TableGroup.pcpp_tables()  # Create tables
         except (aiosqlite.OperationalError, aiosqlite.DatabaseError) as e:
