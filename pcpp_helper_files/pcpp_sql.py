@@ -1,10 +1,7 @@
-import discord
-
 from aiosqlite import Error, DatabaseError, OperationalError
 from async_lru import alru_cache
 from db_setup import SQL_LOG, Database
-from pcpp_message_handler import PCPPMessage
-from typing import List, Tuple, Optional, Union
+from typing import Tuple
 
 
 class PCPPSQL:
@@ -74,8 +71,7 @@ class PCPPSQL:
 
     @classmethod
     async def delete_msg_ids(
-        cls, user_msg_id: int, bot_messages: Tuple[discord.Message, ...]
-    ) -> None:
+        cls, user_msg_id) -> None:
         """
         Delete database record and associated bot messages.
         """
@@ -89,17 +85,13 @@ class PCPPSQL:
                 (user_msg_id,),
             ).run_query()
 
-            # Delete all associated bot messages
-            for bot_message in bot_messages:
-                await PCPPMessage.delete_message(bot_message)
         except (OperationalError, DatabaseError) as db_error:
             SQL_LOG.exception(
-                "Cannot delete the row containing user id or delete the message: %s. Error: %s",
+                "Cannot delete the row containing user id: %s. Error: %s",
                 user_msg_id,
                 db_error,
             )
-        else:
-            cls.pcpp_user_message_count += 1
+            raise
 
     @staticmethod
     @alru_cache(maxsize=1024)

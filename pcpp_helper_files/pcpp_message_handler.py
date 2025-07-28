@@ -3,13 +3,17 @@ import logging
 import textwrap
 from typing import List, Tuple, Optional, Union
 
+from functools import lru_cache
+
 import discord
+
+from aiosqlite import Error, DatabaseError, OperationalError
 from discord.ext import commands
 from async_lru import alru_cache
-from functools import lru_cache
-from .pcpp_utility import PCPPUtility, ILOVEPCS_BLUE
-from .pcpp_interaction_handler import PCPPInteractionHandler
+
+from .pcpp_utility import ILOVEPCS_BLUE
 from .pcpp_ui_components import PCPPButton, PCPPMenu
+from .pcpp_sql import PCPPSQL
 
 DISCORD_LOG = logging.getLogger("discord")
 class HandleLinks:
@@ -124,9 +128,25 @@ class PCPPMessage:
 
     @staticmethod
     async def delete_message(
-        bot_message: discord.Message
-    ):
-        await bot_message.delete()
+        user_msg_id,
+        bot_messages
+        ):
+        try:
+            pcpp_sql = PCPPSQL()
+            await pcpp_sql.delete_msg_ids(user_msg_id)
+
+            # Delete all associated bot messages
+            for bot_message in bot_messages:
+                await bot_message.delete()
+
+        except (OperationalError, DatabaseError, discord.HTTPException) as db_error:
+            SQL_LOG.exception(
+                "Cannot delete the row containing user id or delete the message: %s. Error: %s",
+                user_msg_id,
+                db_error,
+            )
+        else:
+            PCPPSQL.pcpp_user_message_count += 1
 
     @staticmethod
     async def edit_pcpp_message(
@@ -238,7 +258,7 @@ class PCPPMessage:
             )
 
         # Insert message IDs into database
-        await PCPP_SQL.insert_bot_msg_ids(
+        await PCPPSQL.insert_bot_msg_ids(
             pcpp_message.id,
             invalid_bot_message.id,
             message.id,

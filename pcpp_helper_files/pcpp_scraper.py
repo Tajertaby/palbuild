@@ -1,18 +1,10 @@
-import datetime
 import logging
 import re
-import textwrap
-import urllib.parse as parse
-from asyncio import TimeoutError as AsyncioTimeoutError
-from functools import lru_cache
-from typing import List, Tuple, Optional, Union
 
-import discord
-from async_lru import alru_cache
+from asyncio import TimeoutError as AsyncioTimeoutError
+
 from aiohttp import ClientConnectionError, ClientPayloadError, ClientResponseError
-from aiosqlite import Error, DatabaseError, OperationalError
 from bs4 import BeautifulSoup, SoupStrainer
-from discord.ext import commands
 from sessions import SessionManager
 
 server = SessionManager.server  # Logger

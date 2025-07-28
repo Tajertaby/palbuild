@@ -6,14 +6,19 @@ import discord
 import sys
 from pathlib import Path
 
-sys.path.append(str(Path(__file__).parent.parent))
 from discord.ext import commands
 from aiosqlite import OperationalError, DatabaseError
 from db_setup import Database
-from pcpp_helper_files.pcpp_message_handler import PCPPMessage, HandleLinks
-from pcpp_helper_files.pcpp_utility import PCPPUtility, INVALID_URL_PATTERN, ILOVEPCS_BLUE
+
+from pcpp_helper_files.pcpp_message_handler import PCPPMessage
+from pcpp_helper_files.pcpp_utility import (
+    PCPPUtility,
+    INVALID_URL_PATTERN,
+    ILOVEPCS_BLUE,
+)
 from pcpp_helper_files.pcpp_ui_components import PCPPButton, PCPPMenu
 from pcpp_helper_files.pcpp_sql import PCPPSQL
+
 
 class PCPPCog(commands.Cog):
     """
@@ -119,7 +124,7 @@ class PCPPCog(commands.Cog):
             bot_messages = await PCPPSQL.extract_bot_msg_using_user_id(
                 self.bot, bot_msg_ids, channel_id_to_fetch
             )
-            await PCPPSQL.delete_msg_ids(message.id, bot_messages)
+            await PCPPMessage.delete_messages(message.id, bot_messages)
 
     @lru_cache(maxsize=1024)
     def pcpp_regex_search(
