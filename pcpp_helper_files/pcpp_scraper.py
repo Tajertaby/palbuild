@@ -1,18 +1,14 @@
 import logging
 import re
+from bs4 import BeautifulSoup
 
-from asyncio import TimeoutError as AsyncioTimeoutError
+from html_fetcher import HTMLFetcher
 
-from aiohttp import ClientConnectionError, ClientPayloadError, ClientResponseError
-from bs4 import BeautifulSoup, SoupStrainer
-from sessions import SessionManager
-
-server = SessionManager.server  # Logger
 PCPP_LOG = logging.getLogger("pcpp_scraper")
-YEAR_IN_CLASS = 2025
 DOMAIN_PATTERN: re.Pattern[str] = re.compile(
     r"https?://(?:[a-z]{2}\.)?pcpartpicker\.com", re.IGNORECASE
 )
+YEAR_IN_CLASS = 2025
 
 
 class PCPPScraper:
@@ -24,40 +20,11 @@ class PCPPScraper:
         self.power_icon = "\U0001f50c"
         self.earth_icon = "\U0001f30e"
         self.price_icon = "\U0001f4b8"
-
-    async def fetch_html_content(
-        self, url: str, tag_name: str, class_list: list
-    ) -> BeautifulSoup:
-        """
-        Fetch and parse the HTML content from the given PCPartPicker URL.
-        """
-        try:
-            strainer = SoupStrainer(
-                tag_name, class_=class_list
-            )  # Filters the HTML for efficiency
-            page = await SessionManager.request(url)
-            return BeautifulSoup(page, "lxml", parse_only=strainer)
-        except AsyncioTimeoutError as e:
-            raise (f"Web server timeout. URL={url}, {e}") from e
-        except ClientConnectionError as e:
-            raise ClientConnectionError(
-                f"Could not connect to web server. URL={url}, {e}"
-            ) from e
-        except ClientPayloadError as e:
-            raise ClientPayloadError(
-                f"Invalid payload from web server. URL={url}, {e}"
-            ) from e
-        except ClientResponseError as e:
-            raise ClientResponseError(
-                f"Invalid response from web server. URL={url}, {e}"
-            ) from e
-        except Exception as e:
-            raise Exception(f"Unexpected error during network request: {e}") from e
+        self.fetcher = HTMLFetcher(logging.getLogger("pcpp_scraper"))
+        self.logger = logging.getLogger("pcpp_scraper")
 
     def extract_domain(self, url: str) -> str:
-        """
-        Extract the base domain from the given URL.
-        """
+        """Extract the base domain from the given URL."""
         domain_match = DOMAIN_PATTERN.match(url)
         return url[: domain_match.end()]
 
@@ -197,16 +164,13 @@ class PCPPScraper:
         )
 
     async def process_pcpartpicker_list(self, url: str) -> str:
-        """
-        Main method to scrape and process a PCPartPicker list.
-        """
+        """Main method to scrape and process a PCPartPicker list."""
         domain = self.extract_domain(url)
-        max_retries = 3
 
         if "pcpartpicker.com/b/" in url:
-            url = await self.fetch_list_url(url, domain, max_retries)
+            url = await self.fetch_list_url(url, domain)
 
-        soup = await self.strainer_list(url, max_retries)
+        soup = await self.fetch_list_content(url)
 
         component_elements = soup.find_all(
             "td", class_=f"td__component td__component-{YEAR_IN_CLASS}"
@@ -267,31 +231,15 @@ class PCPPScraper:
 
         return pcpp_message
 
-    async def fetch_list_url(self, url: str, domain: str, max_retries: int) -> str:
-        """
-        Fetch the actual list URL for completed builds.
-        """
-        for attempt in range(max_retries, 0, -1):
-            try:
-                soup = await self.fetch_html_content(url, "span", "header-actions")
-                new_url_element = soup.find("span", class_="header-actions")
-                new_url_ending = new_url_element.a.get("href")
-                return f"{domain}{new_url_ending}"
-            except (AsyncioTimeoutError, ClientConnectionError) as e:
-                server.info("Retrying, %s attempts left: %s", attempt, e)
-            except (ClientPayloadError, ClientResponseError) as e:
-                server.exception(e)
-                raise
-            except Exception as e:
-                logging.exception(e)
-                raise
+    async def fetch_list_url(self, url: str, domain: str) -> str:
+        """Fetch the actual list URL for completed builds."""
+        soup = await self.fetcher.fetch_html_content(url, "span", "header-actions")
+        new_url_element = soup.find("span", class_="header-actions")
+        new_url_ending = new_url_element.a.get("href")
+        return f"{domain}{new_url_ending}"
 
-        raise Exception("Failed to fetch list URL after maximum retries")
-
-    async def strainer_list(self, url: str, max_retries: int) -> BeautifulSoup:
-        """
-        Fetch the content of a PCPartPicker list.
-        """
+    async def fetch_list_content(self, url: str) -> BeautifulSoup:
+        """Fetch the content of a PCPartPicker list."""
         tag_names = ["td", "a", "p", "select"]
         class_list = [
             f"td__component td__component-{YEAR_IN_CLASS}",
@@ -307,17 +255,4 @@ class PCPPScraper:
             "note__text note__text--warning",
             "note__text note__text--info",
         ]
-
-        for attempt in range(max_retries, 0, -1):
-            try:
-                return await self.fetch_html_content(url, tag_names, class_list)
-            except (AsyncioTimeoutError, ClientConnectionError) as e:
-                server.info("Retrying, %s attempts left: %s", attempt, e)
-            except (ClientPayloadError, ClientResponseError) as e:
-                server.exception(e)
-                raise
-            except Exception as e:
-                logging.exception(e)
-                raise
-
-        raise Exception("Failed to fetch list content after maximum retries")
+        return await self.fetcher.fetch_html_content(url, tag_names, class_list)
