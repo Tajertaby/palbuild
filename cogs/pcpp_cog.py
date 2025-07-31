@@ -19,7 +19,6 @@ from pcpp_helper_files.pcpp_utility import (
 from pcpp_helper_files.pcpp_ui_components import PCPPButton, PCPPMenu
 from pcpp_helper_files.pcpp_sql import PCPPSQL
 
-
 class PCPPCog(commands.Cog):
     """
     Cog for handling PCPartPicker list previews in Discord.

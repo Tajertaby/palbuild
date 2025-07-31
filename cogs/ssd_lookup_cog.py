@@ -1,5 +1,6 @@
 from discord.ext import commands
 from discord import app_commands
+from ssd_helper_files.ssd_scraper import SSDScraper
 import discord
 
 
@@ -8,7 +9,7 @@ class SSDCog(commands.Cog):
         self.bot = bot
 
     @commands.hybrid_command(
-        name="ssdinfo",
+        name="ssdlookup",
         description="Look up SSD information from the TechPowerUp database.",
     )
     @app_commands.describe(ssd_name="The name of the SSD to look up")
@@ -21,6 +22,8 @@ class SSDCog(commands.Cog):
         ssd_name: str
             The name of the SSD you want information about
         """
+        ssd_scraper = SSDScraper()
+        await ssd_scraper.ssd_scraper_setup(ssd_name)
         await ctx.send(f"You requested information about SSD: {ssd_name}")
 
     # Custom error handler for MissingRequiredArgument

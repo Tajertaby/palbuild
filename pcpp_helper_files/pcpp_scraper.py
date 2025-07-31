@@ -20,8 +20,8 @@ class PCPPScraper:
         self.power_icon = "\U0001f50c"
         self.earth_icon = "\U0001f30e"
         self.price_icon = "\U0001f4b8"
-        self.fetcher = HTMLFetcher(logging.getLogger("pcpp_scraper"))
-        self.logger = logging.getLogger("pcpp_scraper")
+        self.fetcher = HTMLFetcher(PCPP_LOG)
+        self.logger = PCPP_LOG
 
     def extract_domain(self, url: str) -> str:
         """Extract the base domain from the given URL."""
