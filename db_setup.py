@@ -22,14 +22,12 @@ class Database:
         for attempt in range(3, 0, -1):
             try:
                 await self.cursor.execute(self.sql, self.params)
-                print(self.sql, 2)
                 if not self.sql.startswith("SELECT") and auto_commit:
                     await self.conn.commit()
                     SQL_LOG.info("Successfully executed and commited: %s", self.sql)
                     return self.cursor.rowcount  # Returns no of rows affected
                 elif self.sql.startswith("SELECT"):
                     rows = await self.cursor.fetchall()
-                    print(rows, 1)
                     SQL_LOG.info("Successfully executed: %s", self.sql)
                     return rows
                 else:  # This happens when auto commit is false

@@ -1,9 +1,10 @@
 import discord
 import re
 from typing import List
-from ssd_helper_files_ssd_scraper import SSDScraper
+from ssd_helper_files.ssd_scraper import SSDScraper
 
-MENU_TEMPLATE = "ssdname:(?P<name>.{0,75})user:(?P<id>[0-9]+))"
+MENU_TEMPLATE = "ssdname:(?P<name>.{0,75})user:(?P<id>[0-9]+)"
+
 
 class SSDMenu(discord.ui.DynamicItem[discord.ui.Select], template=MENU_TEMPLATE):
     """
@@ -34,9 +35,11 @@ class SSDMenu(discord.ui.DynamicItem[discord.ui.Select], template=MENU_TEMPLATE)
         """
         return [
             discord.SelectOption(
-                label=f"{ssd_name}", description=f"Released: {ssd_released}", value=url
+                label=f"{ssd_name}",
+                description=f"Capacity: {ssd_capacity}\nReleased: {ssd_released}",
+                value=url,
             )
-            for ssd_name, ssd_released, url in ssd_partial_info
+            for ssd_name, ssd_released, ssd_capacity, url in ssd_partial_info
         ]
 
     @classmethod
