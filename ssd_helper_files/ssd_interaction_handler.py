@@ -53,7 +53,7 @@ class SSDMenu(discord.ui.DynamicItem[discord.ui.Select], template=MENU_TEMPLATE)
         """
         Create a PCPPMenu instance from a custom ID.
         """
-        ssd_name = match("name")
+        ssd_name = match["name"]
         user_id = int(match["id"])
         ssd_scraper = SSDScraper()
         ssd_partial_info = ssd_scraper.ssd_scraper_setup(ssd_name)

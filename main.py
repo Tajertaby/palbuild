@@ -37,7 +37,9 @@ class FileManager:
                 file_bools[file] = True
             else:
                 logging.error(
-                    "The file '%s' does not exist in the directory '%s'.", file, COGS_PATH
+                    "The file '%s' does not exist in the directory '%s'.",
+                    file,
+                    COGS_PATH,
                 )
                 file_bools[file] = False
         return file_bools
@@ -201,22 +203,26 @@ async def restart(ctx):
     await ctx.send("Restarting...")
     os.execv(sys.executable, ["python"] + sys.argv)
 
+
 @bot.command(name="sync")
 @commands.is_owner()
 async def sync(ctx: commands.Context) -> None:
     """
     Sync slash commands globally (may take up to 1 hour to update)
     Owner-only command.
-    
+
     Usage:
     !sync
     """
     try:
         synced = await ctx.bot.tree.sync()
-        await ctx.send(f"Successfully synced {len(synced)} commands globally. Changes may take up to 1 hour to appear.")
+        await ctx.send(
+            f"Successfully synced {len(synced)} commands globally. Changes may take up to 1 hour to appear."
+        )
     except Exception as e:
         await ctx.send(f"Failed to sync commands: {e}")
         logging.exception("An exception occurred whilst syncing commands %s", e)
+
 
 @bot.event
 async def on_message(message: discord.Message) -> None:
