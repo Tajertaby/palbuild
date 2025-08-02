@@ -1,8 +1,10 @@
 from discord.ext import commands
 from discord import app_commands
 from ssd_helper_files.ssd_scraper import SSDScraper
+from ssd_interaction_handler.py import SSDMenu
 import discord
 
+ILOVEPCS_BLUE = 9806321
 
 class SSDCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
@@ -23,19 +25,30 @@ class SSDCog(commands.Cog):
             The name of the SSD you want information about
         """
         ssd_scraper = SSDScraper()
-        await ssd_scraper.ssd_scraper_setup(ssd_name)
-        await ctx.send(f"You requested information about SSD: {ssd_name}")
+        ssd_partial_info = await ssd_scraper.ssd_scraper_setup(ssd_name)
+        options = SSDMenu.generate_options(ssd_partial_info)
+        ssd_menu = SSDMenu(options, ssd_name, ctx.author.id)
+        embed = discord.Embed(
+            description = f"Here are the search results for {ssd_name} on the TechPowerUp SSD database; choose an option from the menu to view information about a specific SSD."
+            color = ILOVEPCS_BLUE
+        )
+        await ctx.reply(embed=embed, view=ssd_menu)
 
     # Custom error handler for MissingRequiredArgument
     @ssdlookup.error
     async def ssdinfo_error(self, ctx: commands.Context, error):
         if isinstance(error, commands.MissingRequiredArgument):
-            await ctx.send(
-                "❌ **Error:** You must specify an SSD name!\n"
-                "Example: `!ssdinfo Samsung_970` or `/ssdinfo ssd_name:Samsung_970`"
+            embed = discord.Embed(
+                title = "⚠️ You must specify an SSD name"
+                color = ILOVEPCS_BLUE
             )
+            await ctx.reply(embed=embed)
         else:
-            await ctx.send(f"⚠ An unexpected error occurred: `{error}`")
+            embed = discord.Embed(
+                title = f"❌ An unexpected error occurred: `{error}`"
+                color = ILOVEPCS_BLUE
+            )
+            await ctx.reply(embed=embed)
 
 
 async def setup(bot: commands.Bot):
