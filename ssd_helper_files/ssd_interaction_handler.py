@@ -16,10 +16,12 @@ class SSDMenu(discord.ui.DynamicItem[discord.ui.Select], template=MENU_TEMPLATE)
         options: list[discord.SelectOption],
         ssd_name,
         user_id: int,
+        ssd_scraper: object,
     ) -> None:
-        self.options = options
-        self.ssd_name = ssd_name
+        self.options: discord.SelectOption = options
+        self.ssd_name: str = ssd_name
         self.user_id: int = user_id
+        self.ssd_scraper: object = ssd_scraper
         super().__init__(
             discord.ui.Select(
                 placeholder="Searched SSD Results",
@@ -58,7 +60,7 @@ class SSDMenu(discord.ui.DynamicItem[discord.ui.Select], template=MENU_TEMPLATE)
         ssd_scraper = SSDScraper()
         ssd_partial_info = ssd_scraper.ssd_scraper_setup(ssd_name)
         options = cls.generate_options(ssd_partial_info)
-        return cls(options, user_id)
+        return cls(options, user_id, ssd_scraper)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         # Only allow the user who created the menu to interact with it.
@@ -68,5 +70,6 @@ class SSDMenu(discord.ui.DynamicItem[discord.ui.Select], template=MENU_TEMPLATE)
         """
         Handle the select menu option selection.
         """
-        await PCPPInteractionHandler.send_preview(interaction, self.item.values[0])
+        specific_ssd_url = self.options.value[0]
+        await self.ssd_scraper.specific_ssd_scraper(specific_ssd_url)
         await interaction.message.edit()

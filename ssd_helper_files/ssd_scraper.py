@@ -19,8 +19,8 @@ class SSDScraper:
         return tag_names, class_list
 
     def ssd_specs_attr(self):
-        tag_names = []
-        class_list = []
+        tag_names = ["div", "section"]
+        class_list = ["details", "unreleased p"]
         return tag_names, class_list
 
     async def fetch_ssd_content(self, url, tag_names, class_list):
@@ -78,6 +78,24 @@ class SSDScraper:
         else:
             return NOT_UNIQUE
 
+    def ssd_info_msg(self, soup) -> str:
+        string_list = []
+        hardware_swap_check = soup.find("div", class_="unreleased p")
+        if hardware_swap_check:
+            string_list.append(
+                "**Warning:** This SSD has multiple unannounced hardware swaps which impacts performance."
+            )
+            variant_elements = soup.select(
+                "td.variants-list ul:not([style]) li"
+            )  # Style attribute has uneccesary info
+            print(variant_elements)
+            for variant_element in variant_elements:
+                variant_config = variant_element.contents[0].strip()
+                print(variant_config)
+                span_list = variant_element.select("span.variants-list--item")
+                capacities = [capacity.get_text().strip() for capacity in span_list]
+                print(capacities)
+
     async def ssd_scraper_setup(self, ssd_name):
         tag_names, class_list = self.ssd_link_list_attr()
         ssd_name_encoded = quote(ssd_name)
@@ -88,3 +106,6 @@ class SSDScraper:
 
     async def specific_ssd_scraper(self, url):
         tag_names, class_list = self.ssd_specs_attr()
+        url = "https://www.techpowerup.com/ssd-specs/samsung-990-pro-1-tb.d861"
+        soup = await self.fetch_ssd_content(url, tag_names, class_list)
+        self.ssd_info_msg(soup)
