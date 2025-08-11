@@ -1,4 +1,5 @@
 import logging
+import re
 from bs4 import BeautifulSoup
 from urllib.parse import quote
 
@@ -79,22 +80,56 @@ class SSDScraper:
             return NOT_UNIQUE
 
     def ssd_info_msg(self, soup) -> str:
-        string_list = []
-        hardware_swap_check = soup.find("div", class_="unreleased p")
-        if hardware_swap_check:
-            string_list.append(
-                "**Warning:** This SSD has multiple unannounced hardware swaps which impacts performance."
-            )
-            variant_elements = soup.select(
-                "td.variants-list ul:not([style]) li"
+        ssd_message_list = []
+
+        def ssd_variant_info(ssd_value_element) -> str:
+            variant_elements = ssd_value_element.select(
+                "ul:not([style]) li"
             )  # Style attribute has uneccesary info
-            print(variant_elements)
+            variant_config_and_capacities_list = []
             for variant_element in variant_elements:
                 variant_config = variant_element.contents[0].strip()
-                print(variant_config)
                 span_list = variant_element.select("span.variants-list--item")
-                capacities = [capacity.get_text().strip() for capacity in span_list]
-                print(capacities)
+                capacities = [capacity.get_text(strip=True) for capacity in span_list]
+                variant_config_and_capacities_list.append(f"{variant_config}\n{", ".join(capacities)}")
+            variant_configs_and_capacities = "\n\n".join(variant_config_and_capacities_list)
+            ssd_message_list.insert(
+                0,
+                f"**Warning:** This SSD has multiple unannounced hardware swaps which impacts performance.\n\n**__Variants__**\n{variant_configs_and_capacities}\n\n",
+            )
+
+        table_name_and_properties_dict = {
+            "Solid-State-Drive": ["Capacity:", "Hardware Versions:"],
+            "NAND Flash": ["Manufacturer:", "Name:", "Type:", "Technology:", "Speed:"],
+            "Physical": ["Form Factor:", "Interface:"],
+            "Controller": ["Manufacturer:", "Name:"],
+            "DRAM Cache": ["Type:", "Name:", "Capacity"],
+            "Performance": ["Sequential Read:", "Sequential Write:", "Random Read:", "Random Write:", "Endurance:", "Warranty:", "SLC Write Cache:"]
+        }
+
+        section_list =  soup.find_all("section")
+        for section in section_list:
+            table = section.find("table")
+            table_name = section.find("h1").get_text(strip=True)
+            if table_name in table_name_and_properties_dict: # Checks if table name is found in the dict of select table names
+                ssd_property_list = table_name_and_properties_dict[table_name]
+                ssd_property_elements = table.find_all("th", string=ssd_property_list)
+                ssd_message_list.append(f"**__{table_name}__**\n")
+                for ssd_property_element in ssd_property_elements:
+                    ssd_property = ssd_property_element.get_text(strip=True)
+                    ssd_value_element = ssd_property_element.find_next_sibling()
+                    if ssd_property != "Hardware Versions:": # Checks if ssd has hardware swaps or not
+                        ssd_value = ssd_value_element.get_text(strip=True)
+                        ssd_value_cleaned = re.sub("\\n(\\t)+", " ", ssd_value)
+                        ssd_message_list.append(f"{ssd_property} {ssd_value_cleaned}\n")
+                    else:
+                        ssd_variant_info(ssd_value_element) # Add variant info to ssd message
+            else:
+                continue
+            ssd_message_list.append("\n") # Leave a newline space after each SSD property category
+        ssd_message = "".join(ssd_message_list)
+        print(ssd_message)
+
 
     async def ssd_scraper_setup(self, ssd_name):
         tag_names, class_list = self.ssd_link_list_attr()

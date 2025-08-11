@@ -6,69 +6,110 @@ import discord
 import logging
 import re
 
-ILOVEPCS_BLUE = 9806321
-DISCORD_LOG = logging.getLogger("discord")
+# Constants
+ILOVEPCS_BLUE: int = 9806321
+MAX_SSD_SEARCH_LENGTH: int = 30
+DISCORD_LOG: logging.Logger = logging.getLogger("discord")
 
 
 class SSDCog(commands.Cog):
-    def __init__(self, bot: commands.Bot):
-        self.bot = bot
+    """Discord cog for handling SSD lookup commands using TechPowerUp database."""
+
+    def __init__(self, bot: commands.Bot) -> None:
+        """Initialize the SSD cog with the bot instance."""
+        self.bot: commands.Bot = bot
 
     @commands.hybrid_command(
         name="ssdlookup",
         description="Look up SSD information from the TechPowerUp database.",
     )
     @app_commands.describe(ssd_name="The name of the SSD to look up.")
-    async def ssdlookup(self, ctx: commands.Context, *, ssd_name: str):
+    async def ssdlookup(self, ctx: commands.Context, *, ssd_name: str) -> None:
         """
-        Get information about an SSD
+        Get information about an SSD from TechPowerUp database.
 
         Parameters
         ----------
-        ssd_name: str
-            The name of the SSD you want information about
+        ctx : commands.Context
+            The invocation context
+        ssd_name : str
+            The name of the SSD to search for (max 30 characters)
         """
-
-        ssd_name_length = len(ssd_name)
-        if ssd_name_length > 30:
-            embed = self.embed_maker(
-                f"Your search term is {ssd_name_length} charactors long, cannot be over 30 charactors long"
+        # Validate input length
+        ssd_name_length: int = len(ssd_name)
+        if ssd_name_length > MAX_SSD_SEARCH_LENGTH:
+            embed: discord.Embed = self._create_embed(
+                f"Your search term is {ssd_name_length} characters long, "
+                f"cannot be over {MAX_SSD_SEARCH_LENGTH} characters long"
             )
             await ctx.reply(embed=embed)
             return
 
-        ssd_scraper = SSDScraper()
-        ssd_partial_info = await ssd_scraper.ssd_scraper_setup(ssd_name)
-        if ssd_partial_info != NOT_UNIQUE:
-            options = SSDMenu.generate_options(ssd_partial_info)
-            ssd_menu = SSDMenu(options, ssd_name, ctx.author.id)
-            view = discord.ui.View(timeout=None)
-            view.add_item(ssd_menu)
-            embed = self.embed_maker(
-                f"Here are the search results for `{ssd_name}` on the TechPowerUp SSD database.\nChoose an option from the menu to view information about a specific SSD."
+        # Initialize scraper and fetch data
+        scraper: SSDScraper = SSDScraper()
+        ssd_results: list[tuple] | str = await scraper.ssd_scraper_setup(ssd_name)
+
+        # Test function (consider removing in production)
+        test_result = await scraper.specific_ssd_scraper(
+            "https://www.techpowerup.com/ssd-specs/samsung-990-pro-1-tb.d861"
+        )
+
+        # Handle search results
+        if ssd_results != NOT_UNIQUE:
+            menu_options: list[discord.SelectOption] = SSDMenu.generate_options(
+                ssd_results
             )
-            await ctx.reply(embed=embed, view=view)
+            ssd_menu: SSDMenu = SSDMenu(menu_options, ssd_name, ctx.author.id, scraper)
+
+            view: discord.ui.View = discord.ui.View(timeout=None)
+            view.add_item(ssd_menu)
+
+            response_embed: discord.Embed = self._create_embed(
+                f"Here are the search results for `{ssd_name}` on the TechPowerUp SSD database.\n"
+                "Choose an option from the menu to view information about a specific SSD."
+            )
+            await ctx.reply(embed=response_embed, view=view)
         else:
-            embed = self.embed_maker(
+            error_embed: discord.Embed = self._create_embed(
                 "Cannot generate a menu due to not unique menu options."
             )
-            await ctx.reply(embed=embed)
+            await ctx.reply(embed=error_embed)
 
-    def embed_maker(self, description) -> discord.Embed:
+    def _create_embed(self, description: str) -> discord.Embed:
+        """
+        Create a standardized embed with consistent styling.
+
+        Args:
+            description: The text content for the embed
+
+        Returns:
+            A formatted discord.Embed object
+        """
         return discord.Embed(description=description, color=ILOVEPCS_BLUE)
 
-    # Custom error handler for MissingRequiredArgument
     @ssdlookup.error
-    async def ssdinfo_error(self, ctx: commands.Context, error):
+    async def ssdinfo_error(self, ctx: commands.Context, error: Exception) -> None:
+        """
+        Handle errors for the ssdlookup command.
+
+        Args:
+            ctx: The invocation context
+            error: The exception that was raised
+        """
         if isinstance(error, commands.MissingRequiredArgument):
-            embed = self.embed_maker("⚠️ You must specify an SSD name")
-            await ctx.reply(embed=embed)
+            error_embed: discord.Embed = self._create_embed(
+                "⚠️ You must specify an SSD name"
+            )
+            await ctx.reply(embed=error_embed)
             DISCORD_LOG.exception(error)
         else:
-            embed = self.embed_maker(f"❌ An unexpected error occurred: `{error}`")
-            await ctx.reply(embed=embed)
+            error_embed: discord.Embed = self._create_embed(
+                f"❌ An unexpected error occurred: `{error}`"
+            )
+            await ctx.reply(embed=error_embed)
             DISCORD_LOG.exception(error)
 
 
-async def setup(bot: commands.Bot):
+async def setup(bot: commands.Bot) -> None:
+    """Add the SSDCog to the bot."""
     await bot.add_cog(SSDCog(bot))
