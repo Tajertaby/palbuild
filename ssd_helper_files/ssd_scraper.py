@@ -1,5 +1,6 @@
 import logging
 import re
+from async_lru import alru_cache
 from bs4 import BeautifulSoup
 from urllib.parse import quote
 
@@ -10,24 +11,26 @@ NOT_UNIQUE = "Not unique, cannot generate menu options."
 
 
 class SSDScraper:
+    fetcher = HTMLFetcher(SSD_LOG)
 
-    def __init__(self):
-        self.fetcher = HTMLFetcher(SSD_LOG)
-
-    def ssd_link_list_attr(self):
+    @staticmethod
+    def ssd_link_list_attr():
         tag_names = ["table", "tbody", "tr", "td", "div"]
         class_list = "drives-desktop-table"
         return tag_names, class_list
-
-    def ssd_specs_attr(self):
+    
+    @staticmethod
+    def ssd_specs_attr():
         tag_names = ["div", "section"]
         class_list = ["details", "unreleased p"]
         return tag_names, class_list
 
-    async def fetch_ssd_content(self, url, tag_names, class_list):
-        return await self.fetcher.fetch_html_content(url, tag_names, class_list)
+    @classmethod
+    async def fetch_ssd_content(cls, url, tag_names, class_list):
+        return await cls.fetcher.fetch_html_content(url, tag_names, class_list)
 
-    def process_ssd_name_and_links(self, soup):
+    @classmethod
+    def process_ssd_name_and_links(cls, soup):
         ssd_elements = soup.find_all("tr")[
             2:
         ]  # Excludes empty tr's from thead which are empty.
@@ -55,18 +58,18 @@ class SSDScraper:
                 if (
                     ssd_option_count >= 25
                 ):  # Discord menus can only have up to 25 options
-                    return self.return_info(
+                    return cls.return_info(
                         tpu_ssd_name_list,
                         ssd_released_list,
                         ssd_capacity_list,
                         ssd_url_list,
                     )
-        return self.return_info(
+        return cls.return_info(
             tpu_ssd_name_list, ssd_released_list, ssd_capacity_list, ssd_url_list
         )
-
+    
+    @staticmethod
     def return_info(
-        self,
         tpu_ssd_name_list: list[str],
         ssd_released_list: list[str],
         ssd_capacity_list: list[str],
@@ -78,8 +81,9 @@ class SSDScraper:
             )  # Combines the list items into a list of tuples
         else:
             return NOT_UNIQUE
-
-    def ssd_info_msg(self, soup) -> str:
+    
+    @staticmethod
+    def ssd_info_msg(soup) -> str:
         ssd_message_list = []
 
         def ssd_variant_info(ssd_value_element, ssd_message_list) -> str:
@@ -103,7 +107,7 @@ class SSDScraper:
             )
 
         def review_info(review_section) -> tuple[str, bool]:
-            ssd_review_list = ["\n__**Reviews**__\n"]
+            ssd_review_list = ["**__Reviews__**\n"]
             review_elements = review_section.find_all("a")
             for review_element in review_elements:
                 review_name = review_element.get_text(strip=True)
@@ -134,6 +138,7 @@ class SSDScraper:
 
         section_list = soup.find_all("section")
         ssd_review_parsed = False
+        ssd_review_list = [] # Empty list so variable is still accessible regardless review is avaliable or not
         for section in section_list:
             table = section.find("table")
             table_name = section.find("h1").get_text(strip=True)
@@ -158,28 +163,33 @@ class SSDScraper:
                         ssd_variant_info(
                             ssd_value_element, ssd_message_list
                         )  # Add variant info to ssd message
+                ssd_message_list.append(
+                    "\n"
+                )  # Leave a newline space after each SSD property category
             elif table_name == "Reviews" and not ssd_review_parsed:
                 ssd_review_list, ssd_review_parsed = review_info(section)
             else:
                 continue
-            ssd_message_list.append(
-                "\n"
-            )  # Leave a newline space after each SSD property category
-        if ssd_review_list:  # Checks if TPU has linked a review
-            ssd_message_list.extend(ssd_review_list)
-        ssd_message = "".join(ssd_message_list)
-        print(ssd_message)
 
-    async def ssd_scraper_setup(self, ssd_name):
-        tag_names, class_list = self.ssd_link_list_attr()
+        if ssd_review_parsed:  # Checks if TPU has linked a review
+            ssd_message_list.extend(ssd_review_list)
+        ssd_message = "".join(ssd_message_list).rstrip() # Final SSD message about a specific SSD
+        print(ssd_message)
+        return ssd_message
+
+    @classmethod
+    async def ssd_scraper_setup(cls, ssd_name):
+        tag_names, class_list = cls.ssd_link_list_attr()
         ssd_name_encoded = quote(ssd_name)
         url = f"https://www.techpowerup.com/ssd-specs/?q={ssd_name_encoded}"
-        soup = await self.fetch_ssd_content(url, tag_names, class_list)
-        ssd_partial_info = self.process_ssd_name_and_links(soup)
+        soup = await cls.fetch_ssd_content(url, tag_names, class_list)
+        ssd_partial_info = cls.process_ssd_name_and_links(soup)
         return ssd_partial_info
-
-    async def specific_ssd_scraper(self, url):
-        tag_names, class_list = self.ssd_specs_attr()
-        url = "https://www.techpowerup.com/ssd-specs/samsung-990-pro-1-tb.d861"
-        soup = await self.fetch_ssd_content(url, tag_names, class_list)
-        self.ssd_info_msg(soup)
+    
+    @classmethod
+    @alru_cache(maxsize=1024)
+    async def specific_ssd_scraper(cls, url):
+        tag_names, class_list = cls.ssd_specs_attr()
+        soup = await cls.fetch_ssd_content(url, tag_names, class_list)
+        specific_ssd_info = cls.ssd_info_msg(soup)
+        return specific_ssd_info

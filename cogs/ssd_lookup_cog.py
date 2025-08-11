@@ -46,20 +46,14 @@ class SSDCog(commands.Cog):
             return
 
         # Initialize scraper and fetch data
-        scraper: SSDScraper = SSDScraper()
-        ssd_results: list[tuple] | str = await scraper.ssd_scraper_setup(ssd_name)
-
-        # Test function (consider removing in production)
-        test_result = await scraper.specific_ssd_scraper(
-            "https://www.techpowerup.com/ssd-specs/sk-hynix-platinum-p41-1-tb.d588"
-        )
+        ssd_results: list[tuple] | str = await SSDScraper.ssd_scraper_setup(ssd_name)
 
         # Handle search results
         if ssd_results != NOT_UNIQUE:
             menu_options: list[discord.SelectOption] = SSDMenu.generate_options(
                 ssd_results
             )
-            ssd_menu: SSDMenu = SSDMenu(menu_options, ssd_name, ctx.author.id, scraper)
+            ssd_menu: SSDMenu = SSDMenu(menu_options, ssd_name, ctx.author.id)
 
             view: discord.ui.View = discord.ui.View(timeout=None)
             view.add_item(ssd_menu)

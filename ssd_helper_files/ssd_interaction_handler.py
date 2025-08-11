@@ -18,7 +18,6 @@ class SSDMenu(discord.ui.DynamicItem[discord.ui.Select], template=MENU_TEMPLATE)
         options: List[discord.SelectOption],
         ssd_name: str,
         user_id: int,
-        ssd_scraper: SSDScraper,
     ) -> None:
         """
         Initialize the SSD selection menu.
@@ -27,12 +26,10 @@ class SSDMenu(discord.ui.DynamicItem[discord.ui.Select], template=MENU_TEMPLATE)
             options: List of select options containing SSD information
             ssd_name: The name of the SSD being searched
             user_id: Discord ID of the user who initiated the search
-            ssd_scraper: Instance of SSDScraper for getting SSD details
         """
         self.select_options: List[discord.SelectOption] = options
         self.search_ssd_name: str = ssd_name
         self.owner_user_id: int = user_id
-        self.scraper_instance: SSDScraper = ssd_scraper
 
         # Initialize the parent Select menu with the formatted custom ID
         super().__init__(
@@ -90,14 +87,11 @@ class SSDMenu(discord.ui.DynamicItem[discord.ui.Select], template=MENU_TEMPLATE)
         """
         searched_ssd_name: str = match["name"]
         requesting_user_id: int = int(match["id"])
-        scraper: SSDScraper = (
-            SSDScraper()
-        )  # Preserved original variable name from import
-        search_results: List[Tuple[str, str, str, str]] = scraper.ssd_scraper_setup(
+        search_results: List[Tuple[str, str, str, str]] = await SSDScraper.ssd_scraper_setup(
             searched_ssd_name
         )
         menu_options: List[discord.SelectOption] = cls.generate_options(search_results)
-        return cls(menu_options, searched_ssd_name, requesting_user_id, scraper)
+        return cls(menu_options, searched_ssd_name, requesting_user_id)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         """Ensure only the original requesting user can interact with the menu."""
@@ -108,6 +102,6 @@ class SSDMenu(discord.ui.DynamicItem[discord.ui.Select], template=MENU_TEMPLATE)
         Handle selection of an SSD from the menu.
         Fetches detailed information for the selected SSD.
         """
-        selected_ssd_url: str = self.select_options.values[0]  # URL of the selected SSD
-        await self.scraper_instance.specific_ssd_scraper(selected_ssd_url)
-        await interaction.message.edit()  # Update the message with detailed info
+        selected_ssd_url: str = self.item.values[0]  # URL of the selected SSD
+        specific_ssd_message = await SSDScraper.specific_ssd_scraper(selected_ssd_url)
+        await interaction.message.edit(content=specific_ssd_message)  # Update the message with detailed info
