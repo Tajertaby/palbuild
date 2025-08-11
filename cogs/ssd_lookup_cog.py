@@ -51,7 +51,7 @@ class SSDCog(commands.Cog):
 
         # Test function (consider removing in production)
         test_result = await scraper.specific_ssd_scraper(
-            "https://www.techpowerup.com/ssd-specs/samsung-990-pro-1-tb.d861"
+            "https://www.techpowerup.com/ssd-specs/sk-hynix-platinum-p41-1-tb.d588"
         )
 
         # Handle search results
