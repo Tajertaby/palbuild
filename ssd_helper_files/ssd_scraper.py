@@ -22,7 +22,7 @@ class SSDScraper:
     @staticmethod
     def ssd_specs_attr():
         tag_names = ["div", "section"]
-        class_list = ["details", "unreleased p"]
+        class_list = ["clearfix", "details", "unreleased p"]
         return tag_names, class_list
 
     @classmethod
@@ -48,10 +48,10 @@ class SSDScraper:
             ].get_text()  # Month and year of SSD released
             capacity_elements = ssd_element.select("div.drive-capacities a")
             for capacity_element in capacity_elements:
-                ssd_url = f"https://www.techpowerup.com{capacity_element.get("href")}"
+                ssd_part_url = capacity_element.get("href")
                 ssd_capacity = capacity_element.get_text()
                 ssd_capacity_list.append(ssd_capacity)
-                ssd_url_list.append(ssd_url)
+                ssd_url_list.append(ssd_part_url)
                 tpu_ssd_name_list.append(tpu_ssd_name)
                 ssd_released_list.append(ssd_released)
                 ssd_option_count += 1
@@ -75,6 +75,7 @@ class SSDScraper:
         ssd_capacity_list: list[str],
         ssd_url_list: list[str],
     ):
+
         if len(ssd_url_list) == len(set(ssd_url_list)):  # Checks for unique values
             return zip(
                 tpu_ssd_name_list, ssd_released_list, ssd_capacity_list, ssd_url_list
@@ -174,8 +175,8 @@ class SSDScraper:
         if ssd_review_parsed:  # Checks if TPU has linked a review
             ssd_message_list.extend(ssd_review_list)
         ssd_message = "".join(ssd_message_list).rstrip() # Final SSD message about a specific SSD
-        print(ssd_message)
-        return ssd_message
+        ssd_name = soup.find("h1", class_="drivename").get_text(strip=True)
+        return ssd_name, ssd_message
 
     @classmethod
     async def ssd_scraper_setup(cls, ssd_name):

@@ -1,4 +1,5 @@
 import discord
+import embed_creator
 import re
 from typing import List, Tuple, Match, Any
 from ssd_helper_files.ssd_scraper import SSDScraper
@@ -61,7 +62,7 @@ class SSDMenu(discord.ui.DynamicItem[discord.ui.Select], template=MENU_TEMPLATE)
             discord.SelectOption(
                 label=f"{model_name}",
                 description=f"Capacity: {storage_capacity}\nReleased: {release_date}",
-                value=product_url,
+                value=f"{product_url}",
             )
             for model_name, release_date, storage_capacity, product_url in ssd_search_results
         ]
@@ -102,6 +103,7 @@ class SSDMenu(discord.ui.DynamicItem[discord.ui.Select], template=MENU_TEMPLATE)
         Handle selection of an SSD from the menu.
         Fetches detailed information for the selected SSD.
         """
-        selected_ssd_url: str = self.item.values[0]  # URL of the selected SSD
-        specific_ssd_message = await SSDScraper.specific_ssd_scraper(selected_ssd_url)
-        await interaction.message.edit(content=specific_ssd_message)  # Update the message with detailed info
+        selected_ssd_url = f"https://www.techpowerup.com{self.item.values[0]}"
+        ssd_name, specific_ssd_message = await SSDScraper.specific_ssd_scraper(selected_ssd_url)
+        embed = embed_creator._create_embed(title=ssd_name, description=specific_ssd_message)
+        await interaction.message.edit(embed=embed, view=None)  # Update the message with detailed info
