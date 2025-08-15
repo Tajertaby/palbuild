@@ -30,14 +30,18 @@ class SSDCog(commands.Cog):
         return True
 
     async def _handle_ssd_results(
-        self, 
-        ctx: commands.Context, 
-        ssd_results: list[tuple] | str, 
-        ssd_name: str
+        self, ctx: commands.Context, ssd_results: list[tuple] | str, ssd_name: str
     ) -> None:
         """Handle the SSD search results and send appropriate response."""
-        if ssd_results == NOT_UNIQUE:
-            await self._send_error_response(ctx, "Cannot generate menu due to non-unique options.")
+        if not ssd_results:
+            await self._send_error_response(
+                ctx, f"`{ssd_name}` does not exist in the TechPowerUp SSD database."
+            )
+            return
+        elif ssd_results == NOT_UNIQUE:
+            await self._send_error_response(
+                ctx, "Cannot generate menu due to non-unique options."
+            )
             return
 
         menu_options = SSDMenu.generate_options(ssd_results)
@@ -82,13 +86,15 @@ class SSDCog(commands.Cog):
             await self._handle_ssd_lookup_error(ctx, e)
             DISCORD_LOG.exception(f"Error in ssdlookup command: {e}")
 
-    async def _handle_ssd_lookup_error(self, ctx: commands.Context, error: Exception) -> None:
+    async def _handle_ssd_lookup_error(
+        self, ctx: commands.Context, error: Exception
+    ) -> None:
         """Handle errors specific to SSD lookup."""
         if isinstance(error, commands.MissingRequiredArgument):
             message = "⚠️ You must specify an SSD name"
         else:
             message = f"❌ An unexpected error occurred: `{error}`"
-        
+
         await self._send_error_response(ctx, message)
 
     @ssdlookup.error
