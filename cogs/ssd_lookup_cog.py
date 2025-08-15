@@ -95,4 +95,5 @@ class SSDCog(commands.Cog):
 
 async def setup(bot: commands.Bot) -> None:
     """Add the SSDCog to the bot."""
+    bot.add_dynamic_items(SSDMenu)
     await bot.add_cog(SSDCog(bot))

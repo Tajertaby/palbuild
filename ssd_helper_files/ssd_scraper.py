@@ -84,8 +84,9 @@ class SSDScraper:
             return NOT_UNIQUE
     
     @staticmethod
-    def ssd_info_msg(soup) -> str:
-        ssd_message_list = []
+    def ssd_info_msg(url, soup) -> str:
+        ssd_name = soup.find("h1", class_="drivename").get_text(strip=True)
+        ssd_message_list = [f"## [{ssd_name}]({url})\n\n"]
 
         def ssd_variant_info(ssd_value_element, ssd_message_list) -> str:
             variant_elements = ssd_value_element.select(
@@ -103,7 +104,7 @@ class SSDScraper:
                 variant_config_and_capacities_list
             )
             ssd_message_list.insert(
-                0,
+                1,
                 f"**Warning:** This SSD has multiple unannounced hardware swaps which impacts performance.\n\n**__Variants__**\n{variant_configs_and_capacities}\n\n",
             )
 
@@ -136,7 +137,7 @@ class SSDScraper:
                 "SLC Write Cache:",
             ],
         }
-
+        
         section_list = soup.find_all("section")
         ssd_review_parsed = False
         ssd_review_list = [] # Empty list so variable is still accessible regardless review is avaliable or not
@@ -175,7 +176,6 @@ class SSDScraper:
         if ssd_review_parsed:  # Checks if TPU has linked a review
             ssd_message_list.extend(ssd_review_list)
         ssd_message = "".join(ssd_message_list).rstrip() # Final SSD message about a specific SSD
-        ssd_name = soup.find("h1", class_="drivename").get_text(strip=True)
         return ssd_name, ssd_message
 
     @classmethod
@@ -192,5 +192,5 @@ class SSDScraper:
     async def specific_ssd_scraper(cls, url):
         tag_names, class_list = cls.ssd_specs_attr()
         soup = await cls.fetch_ssd_content(url, tag_names, class_list)
-        specific_ssd_info = cls.ssd_info_msg(soup)
+        specific_ssd_info = cls.ssd_info_msg(url, soup)
         return specific_ssd_info

@@ -94,16 +94,16 @@ class SSDMenu(discord.ui.DynamicItem[discord.ui.Select], template=MENU_TEMPLATE)
         menu_options: List[discord.SelectOption] = cls.generate_options(search_results)
         return cls(menu_options, searched_ssd_name, requesting_user_id)
 
-    async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        """Ensure only the original requesting user can interact with the menu."""
-        return interaction.user.id == self.owner_user_id
-
     async def callback(self, interaction: discord.Interaction) -> None:
         """
         Handle selection of an SSD from the menu.
         Fetches detailed information for the selected SSD.
         """
-        selected_ssd_url = f"https://www.techpowerup.com{self.item.values[0]}"
-        ssd_name, specific_ssd_message = await SSDScraper.specific_ssd_scraper(selected_ssd_url)
-        embed = embed_creator._create_embed(title=ssd_name, description=specific_ssd_message)
-        await interaction.message.edit(embed=embed, view=None)  # Update the message with detailed info
+        if interaction.user.id == self.owner_user_id: # Ensures only person who invoked the command can interact
+            selected_ssd_url = f"https://www.techpowerup.com{self.item.values[0]}"
+            ssd_name, specific_ssd_message = await SSDScraper.specific_ssd_scraper(selected_ssd_url)
+            embed = embed_creator._create_embed(description=specific_ssd_message)
+            await interaction.message.edit(embed=embed, view=None)  # Update the message with detailed info
+        else:
+            embed = embed_creator._create_embed(description="⚠️ Only the person who called the command can select SSD information.")
+            await interaction.response.send_message(embed=embed, ephemeral=True)
