@@ -14,17 +14,19 @@ from sessions import SessionManager
 
 # Load environment variables
 CURRENT_PATH = os.path.dirname(os.path.abspath(__file__))
-load_dotenv(f"{CURRENT_PATH}\\secrets.env")
+SECRET_PATH: str = os.path.join(CURRENT_PATH, "secrets.env")
+print(SECRET_PATH)
+load_dotenv(SECRET_PATH)
 DISCORD_TOKEN: str = os.getenv("DISCORD_TOKEN")
 if not DISCORD_TOKEN:
     logging.error("Provide a bot token")
     sys.exit(0)
-COGS_PATH: str = f"{CURRENT_PATH}\\cogs"
+COGS_PATH: str = os.path.join(CURRENT_PATH, "cogs")
 
 # Retrieve a tuple of cog names and paths
 # Each tuple contains (cog_name, cog_path)
 COGS: Tuple[Tuple[str, str], ...] = tuple(
-    (cog.replace(".py", ""), f"{COGS_PATH}\\{cog}")
+    (cog.replace(".py", ""), os.path.join(COGS_PATH, cog))
     for cog in os.listdir(COGS_PATH)
     if cog.endswith(".py")
 )
