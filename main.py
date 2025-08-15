@@ -15,7 +15,6 @@ from sessions import SessionManager
 # Load environment variables
 CURRENT_PATH = os.path.dirname(os.path.abspath(__file__))
 SECRET_PATH: str = os.path.join(CURRENT_PATH, "secrets.env")
-print(SECRET_PATH)
 load_dotenv(SECRET_PATH)
 DISCORD_TOKEN: str = os.getenv("DISCORD_TOKEN")
 if not DISCORD_TOKEN:
