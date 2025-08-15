@@ -5,6 +5,7 @@ import sys
 from typing import Tuple
 
 import discord
+import sys
 from discord.ext import commands
 from dotenv import load_dotenv
 
@@ -15,6 +16,9 @@ from sessions import SessionManager
 CURRENT_PATH = os.path.dirname(os.path.abspath(__file__))
 load_dotenv(f"{CURRENT_PATH}\\secrets.env")
 DISCORD_TOKEN: str = os.getenv("DISCORD_TOKEN")
+if not DISCORD_TOKEN:
+    logging.error("Provide a bot token")
+    sys.exit(0)
 COGS_PATH: str = f"{CURRENT_PATH}\\cogs"
 
 # Retrieve a tuple of cog names and paths
