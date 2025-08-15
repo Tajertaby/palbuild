@@ -2,6 +2,7 @@ import re
 import urllib.parse as parse
 
 import discord
+import embed_creator
 from async_lru import alru_cache
 
 from .pcpp_scraper import PCPPScraper  # <-- Added import
@@ -77,4 +78,5 @@ class PCPPUtility:
         """
         scraper = PCPPScraper()
         pcpp_message = await scraper.process_pcpartpicker_list(url)
-        return discord.Embed(description=pcpp_message, color=ILOVEPCS_BLUE)
+        list_preview_embed = embed_creator.create_embed(description=pcpp_message)
+        return list_preview_embed

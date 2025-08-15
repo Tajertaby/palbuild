@@ -6,12 +6,12 @@ from typing import List, Tuple, Optional, Union
 from functools import lru_cache
 
 import discord
+import embed_creator
 
 from aiosqlite import Error, DatabaseError, OperationalError
 from discord.ext import commands
 from async_lru import alru_cache
-
-from .pcpp_utility import ILOVEPCS_BLUE
+from db_setup import SQL_LOG
 from .pcpp_ui_components import PCPPButton, PCPPMenu
 from .pcpp_sql import PCPPSQL
 
@@ -44,15 +44,12 @@ class HandleLinks:
         """
         Handle invalid PCPartPicker links by sending an error message.
         """
-        error_embed = discord.Embed(
-            title=(
-                "**One or more of your PCPartPicker link(s) is invalid. "
-                "These links only make the associated list viewable to you. "
-                "Please refer to the image below for guidance.**"
-            ),
-            color=ILOVEPCS_BLUE,
+        error_embed = embed_creator.create_embed(title=
+            "**One or more of your PCPartPicker link(s) is invalid. "
+            "These links only make the associated list viewable to you. "
+            "Please refer to the image below for guidance.**",
+            image_url="https://i.imgur.com/O0TFvRc.jpeg",
         )
-        error_embed.set_image(url="https://i.imgur.com/O0TFvRc.jpeg")
         return error_embed
 
 
@@ -110,12 +107,12 @@ class PCPPMessage:
         Create or edit a placeholder message for various scenarios.
         """
         if no_pcpp_preview:
-            embed = discord.Embed(
-                title="No PCPP previews available.", color=ILOVEPCS_BLUE
+            embed = embed_creator.create_embed(
+                title="No PCPP previews available.",
             )
         elif no_invalid_links:
-            embed = discord.Embed(
-                title="No invalid PCPP links detected.", color=ILOVEPCS_BLUE
+            embed = embed_creator.create_embed(
+                title="No invalid PCPP links detected.",
             )
         else:
             DISCORD_LOG.error("Failed to get a placeholder message.")
@@ -271,7 +268,5 @@ class PCPPMessage:
         Create an embed for PCPartPicker list previews.
         """
         url_list = "\n".join(urls)
-        return discord.Embed(
-            description=f"These are the previews for the following links:\n{url_list}",
-            color=ILOVEPCS_BLUE,
-        )
+        preview_embed = embed_creator.create_embed(description=f"These are the previews for the following links:\n{url_list}")
+        return preview_embed

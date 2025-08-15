@@ -1,17 +1,18 @@
 import discord
 import embed_creator
 import re
-from typing import List, Tuple, Match, Any
+from typing import List, Tuple, Match, Optional
 from ssd_helper_files.ssd_scraper import SSDScraper
 
-# Template for custom select menu ID format
+# Constants
 MENU_TEMPLATE: str = "ssdname:(?P<name>.{0,75})user:(?P<id>[0-9]+)"
+TECH_POWERUP_BASE_URL: str = "https://www.techpowerup.com"
 
 
 class SSDMenu(discord.ui.DynamicItem[discord.ui.Select], template=MENU_TEMPLATE):
     """
-    A dynamic select menu that displays SSD search results from PCPartPicker.
-    Only the user who initiated the search can interact with the menu.
+    Dynamic select menu for displaying and interacting with SSD search results.
+    Ensures only the initiating user can interact with the menu.
     """
 
     def __init__(
@@ -24,45 +25,55 @@ class SSDMenu(discord.ui.DynamicItem[discord.ui.Select], template=MENU_TEMPLATE)
         Initialize the SSD selection menu.
 
         Args:
-            options: List of select options containing SSD information
-            ssd_name: The name of the SSD being searched
-            user_id: Discord ID of the user who initiated the search
+            options: Select options containing SSD information
+            ssd_name: Original search query for SSDs
+            user_id: Discord ID of the command invoker
         """
-        self.select_options: List[discord.SelectOption] = options
-        self.search_ssd_name: str = ssd_name
-        self.owner_user_id: int = user_id
+        self.select_options = options
+        self.search_ssd_name = ssd_name
+        self.owner_user_id = user_id
 
-        # Initialize the parent Select menu with the formatted custom ID
         super().__init__(
             discord.ui.Select(
-                placeholder="Searched SSD Results",
-                custom_id=f"ssdname:{ssd_name}user:{user_id}",
-                options=self.select_options,
+                placeholder="Select an SSD for detailed information",
+                custom_id=self._generate_custom_id(ssd_name, user_id),
+                options=options,
+                min_values=1,
+                max_values=1,
             )
         )
 
     @staticmethod
+    def _generate_custom_id(ssd_name: str, user_id: int) -> str:
+        """Generate a custom ID for the select menu."""
+        return f"ssdname:{ssd_name}user:{user_id}"
+
+    @staticmethod
+    def _format_option_description(release_date: str, capacity: str) -> str:
+        """Format the description text for a menu option."""
+        return f"Capacity: {capacity} | Released: {release_date}"
+
+    @classmethod
     def generate_options(
+        cls,
         ssd_search_results: List[Tuple[str, str, str, str]],
     ) -> List[discord.SelectOption]:
         """
-        Generate select menu options from SSD search results.
+        Create SelectOption objects from SSD search results.
 
         Args:
-            ssd_search_results: List of tuples containing:
-                - model_name: str
-                - release_date: str
-                - storage_capacity: str
-                - product_url: str
+            ssd_search_results: List of (model, release_date, capacity, url) tuples
 
         Returns:
-            List of formatted SelectOption objects for the menu
+            List of formatted SelectOption objects
         """
         return [
             discord.SelectOption(
-                label=f"{model_name}",
-                description=f"Capacity: {storage_capacity}\nReleased: {release_date}",
-                value=f"{product_url}",
+                label=model_name,
+                description=cls._format_option_description(
+                    release_date, storage_capacity
+                ),
+                value=product_url,
             )
             for model_name, release_date, storage_capacity, product_url in ssd_search_results
         ]
@@ -73,37 +84,53 @@ class SSDMenu(discord.ui.DynamicItem[discord.ui.Select], template=MENU_TEMPLATE)
         interaction: discord.Interaction,
         item: discord.ui.Select,
         match: Match[str],
-        /,
     ) -> "SSDMenu":
         """
-        Create an SSDMenu instance from a custom ID pattern match.
+        Reconstruct the menu from a custom ID during interaction.
 
         Args:
-            interaction: The Discord interaction that triggered the menu
+            interaction: The triggering Discord interaction
             item: The Select menu item
-            match: Regex match result from the custom ID
+            match: Regex match of the custom ID
 
         Returns:
-            An initialized SSDMenu instance
+            Reconstructed SSDMenu instance
         """
-        searched_ssd_name: str = match["name"]
-        requesting_user_id: int = int(match["id"])
-        search_results: List[Tuple[str, str, str, str]] = await SSDScraper.ssd_scraper_setup(
-            searched_ssd_name
+        searched_ssd_name = match["name"]
+        user_id = int(match["id"])
+
+        search_results = await SSDScraper.ssd_scraper_setup(searched_ssd_name)
+        menu_options = cls.generate_options(search_results)
+
+        return cls(menu_options, searched_ssd_name, user_id)
+
+    async def _handle_unauthorized_interaction(
+        self, interaction: discord.Interaction
+    ) -> None:
+        """Respond to interactions from non-authorized users."""
+        embed = embed_creator.create_embed(
+            description="⚠️ Only the original command user can interact with this menu."
         )
-        menu_options: List[discord.SelectOption] = cls.generate_options(search_results)
-        return cls(menu_options, searched_ssd_name, requesting_user_id)
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    async def _process_selected_ssd(self, interaction: discord.Interaction) -> None:
+        """Fetch and display details for the selected SSD."""
+        selected_url = f"{TECH_POWERUP_BASE_URL}{self.item.values[0]}"
+        ssd_name, ssd_details = await SSDScraper.specific_ssd_scraper(selected_url)
+
+        embed = embed_creator.create_embed(title=ssd_name, description=ssd_details, title_url=selected_url)
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+        await interaction.message.edit()  # Reset user choice after selection
 
     async def callback(self, interaction: discord.Interaction) -> None:
         """
-        Handle selection of an SSD from the menu.
-        Fetches detailed information for the selected SSD.
+        Handle menu selection events.
+
+        Args:
+            interaction: The triggering Discord interaction
         """
-        if interaction.user.id == self.owner_user_id: # Ensures only person who invoked the command can interact
-            selected_ssd_url = f"https://www.techpowerup.com{self.item.values[0]}"
-            ssd_name, specific_ssd_message = await SSDScraper.specific_ssd_scraper(selected_ssd_url)
-            embed = embed_creator._create_embed(description=specific_ssd_message)
-            await interaction.message.edit(embed=embed, view=None)  # Update the message with detailed info
-        else:
-            embed = embed_creator._create_embed(description="⚠️ Only the person who called the command can select SSD information.")
-            await interaction.response.send_message(embed=embed, ephemeral=True)
+        if interaction.user.id != self.owner_user_id:
+            await self._handle_unauthorized_interaction(interaction)
+            return
+
+        await self._process_selected_ssd(interaction)

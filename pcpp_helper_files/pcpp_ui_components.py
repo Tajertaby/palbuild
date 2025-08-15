@@ -112,5 +112,5 @@ class PCPPMenu(discord.ui.DynamicItem[discord.ui.Select], template=MENU_TEMPLATE
         """
         Handle the select menu option selection.
         """
-        await PCPPInteractionHandler.send_preview(interaction, self.item.values[0], view=None)
+        await PCPPInteractionHandler.send_preview(interaction, self.item.values[0])
         await interaction.message.edit()  # Reset user choice after selection

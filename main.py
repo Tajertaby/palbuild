@@ -5,7 +5,6 @@ import sys
 from typing import Tuple
 
 import discord
-import sys
 from discord.ext import commands
 from dotenv import load_dotenv
 
@@ -16,7 +15,7 @@ from sessions import SessionManager
 CURRENT_PATH = os.path.dirname(os.path.abspath(__file__))
 load_dotenv(f"{CURRENT_PATH}\\secrets.env")
 DISCORD_TOKEN: str = os.getenv("DISCORD_TOKEN")
-if not DISCORD_TOKEN:
+if not DISCORD_TOKEN or DISCORD_TOKEN == "YOUR_TOKEN_HERE":
     logging.error("Provide a bot token")
     sys.exit(0)
 COGS_PATH: str = f"{CURRENT_PATH}\\cogs"
@@ -153,9 +152,9 @@ async def reload(ctx, *cog_names: str):
                 await FileManager.reload_cog(cog_name)
                 successful_cogs.append(cog_name)
             else:
-                logging.error(f"Cog file {cog_name} not found.")
+                logging.error("Cog file %s not found.", cog_name)
         await ctx.send(f"Cog(s) {successful_cogs} were reloaded.")
-        logging.info("Cog(s) %s were reloaded.", {successful_cogs})
+        logging.info("Cog(s) %s were reloaded.", successful_cogs)
     else:
         # Reload all cogs
         for cog_name in COGS:
@@ -177,9 +176,9 @@ async def load(ctx, *cog_names: str):
                 await FileManager.load_cog(cog_name)
                 successful_cogs.append(cog_name)
             else:
-                logging.error(f"Cog file {cog_name}.py not found.")
+                logging.error("Cog file %s.py not found.", cog_name)
         await ctx.send(f"Cog(s) {successful_cogs} were loaded.")
-        logging.info("Cog(s) %s were loaded.", {successful_cogs})
+        logging.info("Cog(s) %s were loaded.", successful_cogs)
     else:
         await ctx.send("No cog files were provided.")
         logging.error("No cog files were provided.")
@@ -199,9 +198,9 @@ async def unload(ctx, *cog_names: str):
                 await FileManager.unload_cog(cog_name)
                 successful_cogs.append(cog_name)
             else:
-                logging.error(f"Cog file {cog_name}.py not found.")
+                logging.error("Cog file %s.py not found.", cog_name)
         await ctx.send(f"Cog(s) {successful_cogs} were unloaded.")
-        logging.info("Cog(s) %s were unloaded.", {successful_cogs})
+        logging.info("Cog(s) %s were unloaded.", successful_cogs)
     else:
         await ctx.send("No cog files were provided.")
         logging.error("No cog files were provided.")
