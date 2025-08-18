@@ -151,7 +151,10 @@ async def reload(ctx, *cog_names: str):
             cog_name = cog_name.strip(", ")  # Remove any extra whitespace
             cog_path = os.path.join(COGS_PATH, f"{cog_name}.py")
             if os.path.isfile(cog_path):
-                await FileManager.reload_cog(cog_name)
+                try:
+                    await FileManager.unload_cog(cog_name)
+                except Exception:
+                    continue
                 cog_success.append(cog_name)
             else:
                 logging.error("Cog file %s not found.", cog_name)
@@ -174,7 +177,10 @@ async def load(ctx, *cog_names: str):
             cog_name = cog_name.strip(", ")  # Remove any extra whitespace
             cog_path = os.path.join(COGS_PATH, f"{cog_name}.py")
             if os.path.isfile(cog_path):
-                await FileManager.load_cog(cog_name)
+                try:
+                    await FileManager.unload_cog(cog_name)
+                except Exception:
+                    continue
                 cog_success.append(cog_name)
             else:
                 logging.error("Cog file %s.py not found.", cog_name)
@@ -190,12 +196,17 @@ async def unload(ctx, *cog_names: str):
     """Unloads one or more specific cogs"""
     if cog_names:
         cog_success = []
+        cog_errors = []
         # Unload specific cogs
         for cog_name in cog_names:
             cog_name = cog_name.strip(", ")  # Remove any extra whitespace
             cog_path = os.path.join(COGS_PATH, f"{cog_name}.py")
+            print(cog_path)
             if os.path.isfile(cog_path):
-                await FileManager.unload_cog(cog_name)
+                try:
+                    await FileManager.unload_cog(cog_name)
+                except Exception:
+                    continue
                 cog_success.append(cog_name)
             else:
                 logging.error("Cog file %s.py not found.", cog_name)
