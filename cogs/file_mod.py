@@ -38,9 +38,7 @@ class AutoMod(commands.Cog):
     }
     SUPPORT_CHANNEL_IDS: set[int] = {
         1138822177999835176,  # ID: #pc-building
-        1238376365917605941,  # ID: #hardware-troubleshoot
-        1275248718618300416,  # ID: #software-troubleshoot
-        1397285902346358897,  # ID: #network-troubleshoot
+        1184892779671851068,  # ID: #troubleshooting
         1138459224691703919,  # ID: #peripherals
         1138821244876238878,  # ID: #prebuilts-laptops
     }
@@ -105,6 +103,11 @@ class AutoMod(commands.Cog):
                 ext_without_dot = ext[1:].lower()  # File name without extension.
                 file_words = set(re.split(self.SEPARATOR_REGEX, attachment.filename))
 
+                if (isinstance(message.channel, discord.Thread))
+                    channel_id = message.channel.parent.id
+                else:
+                    channel_id = message.channel.id
+
                 if ext_without_dot in (
                     self.REJECTED_FILETYPES_LOWER or self.REJECTED_FILETYPES_UPPER
                 ):
@@ -115,7 +118,7 @@ class AutoMod(commands.Cog):
                     break
 
                 elif (
-                    message.channel.id in self.SUPPORT_CHANNEL_IDS
+                    channel_id in self.SUPPORT_CHANNEL_IDS
                     and ext_without_dot in self.GIF
                 ):  # Checks if GIFs are in support text channels.
                     await self.action(
