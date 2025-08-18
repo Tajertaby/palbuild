@@ -45,7 +45,7 @@ class SSDCog(commands.Cog):
             return
 
         menu_options = SSDMenu.generate_options(ssd_results)
-        ssd_menu = SSDMenu(menu_options, ssd_name, ctx.author.id)
+        ssd_menu = SSDMenu(menu_options, ssd_name)
 
         view = discord.ui.View(timeout=None)
         view.add_item(ssd_menu)

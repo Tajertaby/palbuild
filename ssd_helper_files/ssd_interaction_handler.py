@@ -19,7 +19,6 @@ class SSDMenu(discord.ui.DynamicItem[discord.ui.Select], template=MENU_TEMPLATE)
         self,
         options: List[discord.SelectOption],
         ssd_name: str,
-        user_id: int,
     ) -> None:
         """
         Initialize the SSD selection menu.
@@ -27,16 +26,14 @@ class SSDMenu(discord.ui.DynamicItem[discord.ui.Select], template=MENU_TEMPLATE)
         Args:
             options: Select options containing SSD information
             ssd_name: Original search query for SSDs
-            user_id: Discord ID of the command invoker
         """
         self.select_options = options
         self.search_ssd_name = ssd_name
-        self.owner_user_id = user_id
 
         super().__init__(
             discord.ui.Select(
                 placeholder="Select an SSD for detailed information",
-                custom_id=self._generate_custom_id(ssd_name, user_id),
+                custom_id=self._generate_custom_id(ssd_name),
                 options=options,
                 min_values=1,
                 max_values=1,
@@ -44,9 +41,9 @@ class SSDMenu(discord.ui.DynamicItem[discord.ui.Select], template=MENU_TEMPLATE)
         )
 
     @staticmethod
-    def _generate_custom_id(ssd_name: str, user_id: int) -> str:
+    def _generate_custom_id(ssd_name: str) -> str:
         """Generate a custom ID for the select menu."""
-        return f"ssdname:{ssd_name}user:{user_id}"
+        return f"ssdname:{ssd_name}"
 
     @staticmethod
     def _format_option_description(release_date: str, capacity: str) -> str:
@@ -97,21 +94,11 @@ class SSDMenu(discord.ui.DynamicItem[discord.ui.Select], template=MENU_TEMPLATE)
             Reconstructed SSDMenu instance
         """
         searched_ssd_name = match["name"]
-        user_id = int(match["id"])
 
         search_results = await SSDScraper.ssd_scraper_setup(searched_ssd_name)
         menu_options = cls.generate_options(search_results)
 
-        return cls(menu_options, searched_ssd_name, user_id)
-
-    async def _handle_unauthorized_interaction(
-        self, interaction: discord.Interaction
-    ) -> None:
-        """Respond to interactions from non-authorized users."""
-        embed = embed_creator.create_embed(
-            description="⚠️ Only the original command user can interact with this menu."
-        )
-        await interaction.response.send_message(embed=embed, ephemeral=True)
+        return cls(menu_options, searched_ssd_name)
 
     async def _process_selected_ssd(self, interaction: discord.Interaction) -> None:
         """Fetch and display details for the selected SSD."""
@@ -129,8 +116,4 @@ class SSDMenu(discord.ui.DynamicItem[discord.ui.Select], template=MENU_TEMPLATE)
         Args:
             interaction: The triggering Discord interaction
         """
-        if interaction.user.id != self.owner_user_id:
-            await self._handle_unauthorized_interaction(interaction)
-            return
-
         await self._process_selected_ssd(interaction)
