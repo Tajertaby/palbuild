@@ -145,14 +145,18 @@ bot = DiscordBot()
 async def reload(ctx, *cog_names: str):
     """Reloads one or more specific cogs or all cogs if no cog names are provided."""
     if cog_names:
+        cog_success = []
         # Reload specific cogs
         for cog_name in cog_names:
             cog_name = cog_name.strip(", ")  # Remove any extra whitespace
             cog_path = os.path.join(COGS_PATH, f"{cog_name}.py")
             if os.path.isfile(cog_path):
                 await FileManager.reload_cog(cog_name)
+                cog_success.append(cog_name)
             else:
                 logging.error("Cog file %s not found.", cog_name)
+        cog_success_message = ", ".join(cog_success)
+        await ctx.send(f"Reloaded cogs: {cog_success_message}")
     else:
         # Reload all cogs
         for cog_name in COGS:
@@ -164,14 +168,18 @@ async def reload(ctx, *cog_names: str):
 async def load(ctx, *cog_names: str):
     """Loads one or more specific cogs"""
     if cog_names:
-        # Reload specific cogs
+        cog_success = []
+        # Load specific cogs
         for cog_name in cog_names:
             cog_name = cog_name.strip(", ")  # Remove any extra whitespace
             cog_path = os.path.join(COGS_PATH, f"{cog_name}.py")
             if os.path.isfile(cog_path):
                 await FileManager.load_cog(cog_name)
+                cog_success.append(cog_name)
             else:
                 logging.error("Cog file %s.py not found.", cog_name)
+        cog_success_message = ", ".join(cog_success)
+        await ctx.send(f"Loaded cogs: {cog_success_message}")
     else:
         logging.error("No cog files were provided.")
 
@@ -181,14 +189,18 @@ async def load(ctx, *cog_names: str):
 async def unload(ctx, *cog_names: str):
     """Unloads one or more specific cogs"""
     if cog_names:
-        # Reload specific cogs
+        cog_success = []
+        # Unload specific cogs
         for cog_name in cog_names:
             cog_name = cog_name.strip(", ")  # Remove any extra whitespace
             cog_path = os.path.join(COGS_PATH, f"{cog_name}.py")
             if os.path.isfile(cog_path):
                 await FileManager.unload_cog(cog_name)
+                cog_success.append(cog_name)
             else:
                 logging.error("Cog file %s.py not found.", cog_name)
+        cog_success_message = ", ".join(cog_success)
+        await ctx.send(f"Unloaded cogs: {cog_success_message}")
     else:
         logging.error("No cog files were provided.")
 
