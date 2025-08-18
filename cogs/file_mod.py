@@ -103,7 +103,7 @@ class AutoMod(commands.Cog):
                 ext_without_dot = ext[1:].lower()  # File name without extension.
                 file_words = set(re.split(self.SEPARATOR_REGEX, attachment.filename))
 
-                if (isinstance(message.channel, discord.Thread))
+                if (isinstance(message.channel, discord.Thread)):
                     channel_id = message.channel.parent.id
                 else:
                     channel_id = message.channel.id
