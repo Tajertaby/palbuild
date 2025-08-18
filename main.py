@@ -155,7 +155,8 @@ async def reload(ctx, *cog_names: str):
                     await FileManager.unload_cog(cog_name)
                 except Exception:
                     continue
-                cog_success.append(cog_name)
+                else:
+                    cog_success.append(cog_name)
             else:
                 logging.error("Cog file %s not found.", cog_name)
         cog_success_message = ", ".join(cog_success)
@@ -181,7 +182,8 @@ async def load(ctx, *cog_names: str):
                     await FileManager.unload_cog(cog_name)
                 except Exception:
                     continue
-                cog_success.append(cog_name)
+                else:
+                    cog_success.append(cog_name)
             else:
                 logging.error("Cog file %s.py not found.", cog_name)
         cog_success_message = ", ".join(cog_success)
@@ -207,7 +209,8 @@ async def unload(ctx, *cog_names: str):
                     await FileManager.unload_cog(cog_name)
                 except Exception:
                     continue
-                cog_success.append(cog_name)
+                else:
+                   cog_success.append(cog_name)
             else:
                 logging.error("Cog file %s.py not found.", cog_name)
         cog_success_message = ", ".join(cog_success)
