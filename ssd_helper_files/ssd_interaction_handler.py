@@ -5,7 +5,7 @@ from typing import List, Tuple, Match, Optional
 from ssd_helper_files.ssd_scraper import SSDScraper
 
 # Constants
-MENU_TEMPLATE: str = "ssdname:(?P<name>.{0,75})user:(?P<id>[0-9]+)"
+MENU_TEMPLATE: str = "ssdname:(?P<name>.{0,75})"
 TECH_POWERUP_BASE_URL: str = "https://www.techpowerup.com"
 
 

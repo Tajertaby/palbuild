@@ -8,7 +8,7 @@ import logging
 from typing import Optional
 
 # Constants
-MAX_SSD_SEARCH_LENGTH: int = 30
+MAX_SSD_SEARCH_LENGTH: int = 75
 DISCORD_LOG: logging.Logger = logging.getLogger("discord")
 
 
