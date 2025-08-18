@@ -146,25 +146,50 @@ async def reload(ctx, *cog_names: str):
     """Reloads one or more specific cogs or all cogs if no cog names are provided."""
     if cog_names:
         cog_success = []
+        cog_errors = []
         # Reload specific cogs
         for cog_name in cog_names:
             cog_name = cog_name.strip(", ")  # Remove any extra whitespace
             cog_path = os.path.join(COGS_PATH, f"{cog_name}.py")
             if os.path.isfile(cog_path):
                 try:
-                    await FileManager.unload_cog(cog_name)
-                except Exception:
-                    continue
-                else:
+                    await FileManager.reload_cog(cog_name)
                     cog_success.append(cog_name)
+                except Exception as e:
+                    cog_errors.append(cog_name)
+                    logging.error("Failed to reload cog %s: %s", cog_name, e)
             else:
-                logging.error("Cog file %s not found.", cog_name)
-        cog_success_message = ", ".join(cog_success)
-        await ctx.send(f"Reloaded cogs: {cog_success_message}")
+                cog_errors.append(cog_name)
+                logging.error("Cog file %s.py not found.", cog_name)
+        
+        # Send response
+        response_parts = []
+        if cog_success:
+            response_parts.append(f"Successfully reloaded: {', '.join(cog_success)}")
+        if cog_errors:
+            response_parts.append(f"Failed to reload: {', '.join(cog_errors)}")
+        
+        await ctx.send("\n".join(response_parts) if response_parts else "No cogs were processed.")
     else:
         # Reload all cogs
-        for cog_name in COGS:
-            await FileManager.reload_cog(cog_name)
+        cog_success = []
+        cog_errors = []
+        for cog_name, _ in COGS:  # Use tuple unpacking since COGS contains tuples
+            try:
+                await FileManager.reload_cog(cog_name)
+                cog_success.append(cog_name)
+            except Exception as e:
+                cog_errors.append(cog_name)
+                logging.error("Failed to reload cog %s: %s", cog_name, e)
+        
+        # Send response
+        response_parts = []
+        if cog_success:
+            response_parts.append(f"Successfully reloaded: {', '.join(cog_success)}")
+        if cog_errors:
+            response_parts.append(f"Failed to reload: {', '.join(cog_errors)}")
+        
+        await ctx.send("\n".join(response_parts) if response_parts else "No cogs were processed.")
 
 
 @bot.command(name="load")
@@ -173,23 +198,33 @@ async def load(ctx, *cog_names: str):
     """Loads one or more specific cogs"""
     if cog_names:
         cog_success = []
+        cog_errors = []
         # Load specific cogs
         for cog_name in cog_names:
             cog_name = cog_name.strip(", ")  # Remove any extra whitespace
             cog_path = os.path.join(COGS_PATH, f"{cog_name}.py")
             if os.path.isfile(cog_path):
                 try:
-                    await FileManager.unload_cog(cog_name)
-                except Exception:
-                    continue
-                else:
+                    await FileManager.load_cog(cog_name)
                     cog_success.append(cog_name)
+                except Exception as e:
+                    cog_errors.append(cog_name)
+                    logging.error("Failed to load cog %s: %s", cog_name, e)
             else:
+                cog_errors.append(cog_name)
                 logging.error("Cog file %s.py not found.", cog_name)
-        cog_success_message = ", ".join(cog_success)
-        await ctx.send(f"Loaded cogs: {cog_success_message}")
+        
+        # Send response
+        response_parts = []
+        if cog_success:
+            response_parts.append(f"Successfully loaded: {', '.join(cog_success)}")
+        if cog_errors:
+            response_parts.append(f"Failed to load: {', '.join(cog_errors)}")
+        
+        await ctx.send("\n".join(response_parts) if response_parts else "No cogs were processed.")
     else:
-        logging.error("No cog files were provided.")
+        await ctx.send("Please specify which cogs to load.")
+        logging.error("No cog files were provided for load command.")
 
 
 @bot.command(name="unload")
@@ -203,20 +238,28 @@ async def unload(ctx, *cog_names: str):
         for cog_name in cog_names:
             cog_name = cog_name.strip(", ")  # Remove any extra whitespace
             cog_path = os.path.join(COGS_PATH, f"{cog_name}.py")
-            print(cog_path)
             if os.path.isfile(cog_path):
                 try:
                     await FileManager.unload_cog(cog_name)
-                except Exception:
-                    continue
-                else:
-                   cog_success.append(cog_name)
+                    cog_success.append(cog_name)
+                except Exception as e:
+                    cog_errors.append(cog_name)
+                    logging.error("Failed to unload cog %s: %s", cog_name, e)
             else:
+                cog_errors.append(cog_name)
                 logging.error("Cog file %s.py not found.", cog_name)
-        cog_success_message = ", ".join(cog_success)
-        await ctx.send(f"Unloaded cogs: {cog_success_message}")
+        
+        # Send response
+        response_parts = []
+        if cog_success:
+            response_parts.append(f"Successfully unloaded: {', '.join(cog_success)}")
+        if cog_errors:
+            response_parts.append(f"Failed to unload: {', '.join(cog_errors)}")
+        
+        await ctx.send("\n".join(response_parts) if response_parts else "No cogs were processed.")
     else:
-        logging.error("No cog files were provided.")
+        await ctx.send("Please specify which cogs to unload.")
+        logging.error("No cog files were provided for unload command.")
 
 
 @bot.command(name="stop")
